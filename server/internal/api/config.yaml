@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+package: api
+output: internal/api/api.gen.go
+generate:
+  models: true
+  chi-server: true
+  strict-server: true
+
+output-options:
+  name-normalizer: ToCamelCase
+  prefer-skip-optional-pointer: false
+  prefer-skip-optional-pointer-with-omitzero: false
+  prefer-skip-optional-pointer-on-container-types: false
+  resolve-type-name-collisions: false
+  generate-types-for-anonymous-schemas: false
+  nullable-type: true

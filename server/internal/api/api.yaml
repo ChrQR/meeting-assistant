@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=./schema.json
+openapi: 3.1.0
+info:
+  title: meeting-assistant-api
+  version: 0.1.0
+paths:
+  /recordings:
+    summary: Endpoint for managing recordings
+    post:
+      tags:
+        - recording
+      operationId: UploadRecording
+      description: endpoint for uploading audio recording for transcription.
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+              required:
+                - title
+                - file
+      responses:
+        "201":
+          description: Recording succesfully uploaded
+        "400":
+          description: Bad request ie. missing data or fields
+        "422":
+          description: Misshaped json
+        "500":
+          description: An error happened on the server

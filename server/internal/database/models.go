@@ -27,18 +27,27 @@ type Conversation struct {
 	Cost               float64
 	Language           string
 	LanguageConfidence float64
+	RecordingID        uuid.UUID
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+}
+
+type Recording struct {
+	ID        uuid.UUID
+	Path      string
+	Extension string
+	Filename  string
+	Status    string
 }
 
 type Segment struct {
 	ID             uuid.UUID
 	Text           pgtype.Text
-	Cost           pgtype.Float8
 	StartTime      pgtype.Float8
 	EndTime        pgtype.Float8
-	Confidence     pgtype.Float8
+	Duration       pgtype.Float8
 	ConversationID uuid.UUID
+	SpeakerLabel   string
 	SpeakerID      pgtype.UUID
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
