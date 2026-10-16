@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
+	"strings"
 
 	"github.com/ChrQR/meeting-assistant/server/internal/api"
 	"github.com/ChrQR/meeting-assistant/server/internal/types"
@@ -12,6 +14,8 @@ import (
 func (s *Handlers) UploadRecording(ctx context.Context, req api.UploadRecordingRequestObject) (api.UploadRecordingResponseObject, error) {
 	var title string
 	var fileBytes []byte
+	var extension string
+	var fileName string
 	for {
 		part, err := req.Body.NextPart()
 		if errors.Is(err, io.EOF) {
@@ -29,6 +33,11 @@ func (s *Handlers) UploadRecording(ctx context.Context, req api.UploadRecordingR
 			}
 			title = string(data)
 		case "file":
+			fileName := part.FileName()
+
+			// 2. Extract extension (e.g. ".mp3" -> "mp3")
+			ext := filepath.Ext(fileName)
+			extension = strings.TrimPrefix(ext, ".")
 			data, err := io.ReadAll(part)
 			if err != nil {
 				return nil, err
@@ -40,8 +49,11 @@ func (s *Handlers) UploadRecording(ctx context.Context, req api.UploadRecordingR
 		return api.UploadRecording400Response{}, errors.New("missing required form fields")
 	}
 	if err := s.TranscriptionService.ProcessRecording(ctx, types.Recording{
-		Title:    title,
-		FileData: fileBytes,
+		Title:     title,
+		FileData:  fileBytes,
+		Extension: extension,
+		FileName:  fileName,
+		UserPath:  "christian", // development value. will be user id later, extracted by auth.
 	}); err != nil {
 		return api.UploadRecording400Response{}, err
 	}

@@ -10,7 +10,6 @@ class Settings(BaseSettings):
     log_level: int | Literal["trace", "debug", "info", "notice", "warn", "error"] = (
         "debug"
     )
-    openrouter_api_key: str
     logfire_api_key: str
 
 

@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/ChrQR/meeting-assistant/server/internal/client"
+	"github.com/ChrQR/meeting-assistant/server/internal/database"
 	"github.com/ChrQR/meeting-assistant/server/internal/repository"
 	"github.com/ChrQR/meeting-assistant/server/internal/server"
 	"github.com/ChrQR/meeting-assistant/server/internal/service"
@@ -24,15 +25,28 @@ func main() {
 		log.Fatal("OPENROUTER_API_KEY not set")
 	}
 
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL not set")
+	}
+
+	embeddingServiceURL := os.Getenv("EMBEDDING_SERVICE_URL")
+
 	storageClient, err := client.NewStorageClient(ctx, bucketName)
 	if err != nil {
 		log.Fatalf("Unable to initiate storage client: %v", err)
 	}
 
-	dbRepository := repository.NewDBRepository(db database.Queries)
-	transciptionClient := client.NewTranscriptionClient(openrouterAPIKey)
+	db, err := database.NewConnection(ctx, dbURL)
+	if err != nil {
+		log.Fatalf("Error initiating db connection: %v", err)
+	}
 
-	transcriptionService := service.NewTranscriptionService(transciptionClient, storageClient, dbRepository)
+	dbRepository := repository.NewDBRepository(db)
+	transciptionClient := client.NewTranscriptionClient(openrouterAPIKey)
+	embeddingClient := client.NewEmbeddingClient(embeddingServiceURL)
+
+	transcriptionService := service.NewTranscriptionService(transciptionClient, storageClient, embeddingClient, dbRepository)
 
 	server := server.NewServer(transcriptionService)
 	if err := server.Run(); err != nil {

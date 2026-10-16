@@ -4,7 +4,7 @@ dependencies = [
   "pydantic-ai-slim[openrouter]",
   "pydantic",
   "pydantic-settings",
-  "logfire",
+  "logfire[fastapi]",
   "numpy>=2.5.3",
   "sqlmodel>=0.0.48",
   "soundfile>=0.14.0",
@@ -14,6 +14,7 @@ dependencies = [
   "aiofiles>=25.1.0",
   "opentelemetry-instrumentation-httpx>=0.65b0",
   "fastapi[all]>=0.143.0",
+  "torchcodec>=0.17.0",
 ]
 name = "meeting-agent"
 version = "0.1.0"
@@ -21,9 +22,6 @@ description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "ChrQR", email = "christian@rannes.dev" }]
 requires-python = ">=3.13"
-
-[project.scripts]
-meeting-agent = "meeting_agent.main:run"
 
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13.0"]

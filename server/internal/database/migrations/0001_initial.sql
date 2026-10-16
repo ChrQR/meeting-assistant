@@ -8,6 +8,15 @@ CREATE TABLE company(
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+
+CREATE TABLE recording(
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  path TEXT NOT NULL,
+  extension VARCHAR(12) NOT NULL,
+  filename TEXT NOT NULL,
+  status TEXT NOT NULL
+);
+
 CREATE TABLE conversation(
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
@@ -29,7 +38,7 @@ CREATE TABLE speaker(
   name TEXT,
   email VARCHAR(64),
   company_id UUID,
-  voice_embedding VECTOR(512),
+  voice_embedding VECTOR(192),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
@@ -56,14 +65,6 @@ CREATE TABLE segment(
     REFERENCES conversation(id) ON DELETE CASCADE,
   CONSTRAINT fk_speaker_id FOREIGN KEY (speaker_id)
     REFERENCES speaker(id)
-);
-
-CREATE TABLE recording(
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  path TEXT NOT NULL,
-  extension VARCHAR(12) NOT NULL,
-  filename TEXT NOT NULL,
-  status TEXT NOT NULL
 );
 
 

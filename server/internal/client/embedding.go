@@ -42,6 +42,7 @@ func (c *embeddingClient) EmbedSpeakers(ctx context.Context, recording []byte, s
 		log.Printf("Error creating embedding request: %v", err)
 		return types.EmbeddingResponse{}, err
 	}
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {

@@ -7,10 +7,11 @@ import (
 	"github.com/ChrQR/meeting-assistant/server/internal/types"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pgvector/pgvector-go"
 )
 
 type dbRepository struct {
-	db database.Queries
+	db *database.DB
 }
 
 type DBRepository interface {
@@ -18,9 +19,11 @@ type DBRepository interface {
 	UpdateRecordingStatus(ctx context.Context, recordingID uuid.UUID, status types.RecordingStatus) error
 	InsertCoversation(ctx context.Context, title string, transcriptions types.Transcription, recordingID uuid.UUID) (uuid.UUID, error)
 	InsertSegments(ctx context.Context, segments []types.TranscriptionSegment, conversationID uuid.UUID) error
+	GetSimilarSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error)
+	InsertAnonymousSpeaker(ctx context.Context, embedding []float32) (uuid.UUID, error)
 }
 
-func NewDBRepository(db database.Queries) DBRepository {
+func NewDBRepository(db *database.DB) DBRepository {
 	return &dbRepository{
 		db,
 	}
@@ -72,4 +75,16 @@ func (r *dbRepository) InsertSegments(ctx context.Context, segments []types.Tran
 	}
 	_, err := r.db.InsertSegments(ctx, dbSegments)
 	return err
+}
+
+func (r *dbRepository) GetSimilarSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error) {
+	data, err := r.db.GetSimilarSpeaker(ctx, pgvector.NewVector(embedding))
+	return types.IdentifiedSpeaker{
+		ID:              data.ID,
+		SimilarityScore: data.SimilarityScore,
+	}, err
+}
+
+func (r *dbRepository) InsertAnonymousSpeaker(ctx context.Context, embedding []float32) (uuid.UUID, error) {
+	return r.db.InsertAnonymousSpeaker(ctx, pgvector.NewVector(embedding))
 }

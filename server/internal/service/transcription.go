@@ -2,15 +2,20 @@ package service
 
 import (
 	"context"
+	"errors"
+	"log"
 
 	"github.com/ChrQR/meeting-assistant/server/internal/client"
 	"github.com/ChrQR/meeting-assistant/server/internal/repository"
 	"github.com/ChrQR/meeting-assistant/server/internal/types"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type transcriptionService struct {
 	transcriptionClient client.TranscriptionClient
 	storageClient       client.StorageClient
+	embeddingClient     client.EmbeddingClient
 	dbRepository        repository.DBRepository
 }
 
@@ -18,10 +23,14 @@ type TranscriptionService interface {
 	ProcessRecording(ctx context.Context, file types.Recording) error
 }
 
-func NewTranscriptionService(transcriptionClient client.TranscriptionClient, storageClient client.StorageClient, dbRepository repository.DBRepository) TranscriptionService {
+func NewTranscriptionService(
+	transcriptionClient client.TranscriptionClient,
+	storageClient client.StorageClient, embeddingClient client.EmbeddingClient, dbRepository repository.DBRepository,
+) TranscriptionService {
 	return &transcriptionService{
 		transcriptionClient,
 		storageClient,
+		embeddingClient,
 		dbRepository,
 	}
 }
@@ -56,6 +65,36 @@ func (s *transcriptionService) ProcessRecording(ctx context.Context, file types.
 	}
 
 	// request embedding
-	// match with existing speaker or create new unknown
+	embeddings, err := s.embeddingClient.EmbedSpeakers(ctx, file.FileData, transcription.Speakers)
+	if err != nil {
+		return err
+	}
+
+	mappedSpeakers := make(map[string]uuid.UUID)
+
+	for _, embedding := range embeddings.Data {
+		speaker, err := s.dbRepository.GetSimilarSpeaker(ctx, embedding.Embedding)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// If no speakers returned, insert an unknow speaker.
+				ID, err := s.dbRepository.InsertAnonymousSpeaker(ctx, embedding.Embedding)
+				if err != nil {
+					log.Printf("Failed to insert speaker with label %s: %v", embedding.SpeakerLabel, err)
+				}
+				mappedSpeakers[embedding.SpeakerLabel] = ID
+			} else {
+				log.Printf("error fetching similar speaker: %v", err)
+				return err
+			}
+		}
+		mappedSpeakers[embedding.SpeakerLabel] = speaker.ID
+	}
+
+	// Update segments with speakerID
+
+	// Request Summary
+
+	// Insert Summary
+
 	return nil
 }
