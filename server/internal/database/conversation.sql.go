@@ -19,14 +19,16 @@ INSERT INTO conversation (
   cost,
   language,
   language_confidence,
-  recording_id
+  recording_id,
+  summary
 ) VALUES ( 
   $1,
   $2,
   $3,
   $4,
   $5,
-  $6
+  $6,
+  $7
 ) returning id
 `
 
@@ -37,6 +39,7 @@ type InsertConversationParams struct {
 	Language           string
 	LanguageConfidence float64
 	RecordingID        uuid.UUID
+	Summary            pgtype.Text
 }
 
 func (q *Queries) InsertConversation(ctx context.Context, arg InsertConversationParams) (uuid.UUID, error) {
@@ -47,6 +50,7 @@ func (q *Queries) InsertConversation(ctx context.Context, arg InsertConversation
 		arg.Language,
 		arg.LanguageConfidence,
 		arg.RecordingID,
+		arg.Summary,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

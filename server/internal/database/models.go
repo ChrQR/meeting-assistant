@@ -47,8 +47,7 @@ type Segment struct {
 	EndTime        pgtype.Float8
 	Duration       pgtype.Float8
 	ConversationID uuid.UUID
-	SpeakerLabel   string
-	SpeakerID      *uuid.UUID
+	SpeakerID      uuid.UUID
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

@@ -34,7 +34,7 @@ func (r iteratorForInsertSegments) Values() ([]interface{}, error) {
 		r.rows[0].EndTime,
 		r.rows[0].Duration,
 		r.rows[0].ConversationID,
-		r.rows[0].SpeakerLabel,
+		r.rows[0].SpeakerID,
 	}, nil
 }
 
@@ -43,5 +43,5 @@ func (r iteratorForInsertSegments) Err() error {
 }
 
 func (q *Queries) InsertSegments(ctx context.Context, arg []InsertSegmentsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"segment"}, []string{"text", "start_time", "end_time", "duration", "conversation_id", "speaker_label"}, &iteratorForInsertSegments{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"segment"}, []string{"text", "start_time", "end_time", "duration", "conversation_id", "speaker_id"}, &iteratorForInsertSegments{rows: arg})
 }

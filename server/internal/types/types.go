@@ -18,9 +18,12 @@ type Recording struct {
 type RecordingStatus string
 
 const (
-	RecordingTranscribing RecordingStatus = "transcribing"
-	RecordingEmbedding    RecordingStatus = "embedding"
-	RecordingCompleted    RecordingStatus = "completed"
+	RecordingTranscribing      RecordingStatus = "transcribing"
+	RecordingEmbedding         RecordingStatus = "embedding"
+	RecordingSummaizing        RecordingStatus = "summarizing"
+	RecordingAssigningSpeakers RecordingStatus = "assigning_speakers"
+	RecordingCompleted         RecordingStatus = "completed"
+	RecordingFailed            RecordingStatus = "failed"
 )
 
 type TranscriptionUsage struct {
@@ -50,11 +53,12 @@ type Transcription struct {
 }
 
 type TranscriptionSegment struct {
-	Speaker  string
-	Start    float64
-	End      float64
-	Text     string
-	Duration float64
+	Speaker   string
+	Start     float64
+	End       float64
+	Text      string
+	Duration  float64
+	SpeakerID uuid.UUID
 }
 
 type TranscriptionSpeaker struct {

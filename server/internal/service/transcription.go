@@ -55,54 +55,58 @@ func (s *transcriptionService) ProcessRecording(ctx context.Context, file types.
 	if err != nil {
 		return err
 	}
-	// inserts transcription and update recording status
-	conversationID, err := s.dbRepository.InsertCoversation(ctx, file.Title, transcription, recordingID)
-	if err != nil {
+
+	if err := s.dbRepository.UpdateRecordingStatus(ctx, recordingID, types.RecordingEmbedding); err != nil {
 		return err
 	}
-
-	if err = s.dbRepository.InsertSegments(ctx, transcription.Segments, conversationID); err != nil {
-		return nil
-	}
-
-	if err = s.dbRepository.UpdateRecordingStatus(ctx, recordingID, types.RecordingEmbedding); err != nil {
-		return err
-	}
-
 	// request embedding
 	embeddings, err := s.embeddingClient.EmbedSpeakers(ctx, file.FileData, transcription.Speakers)
 	if err != nil {
 		return err
 	}
 
-	mappedSpeakers := make(map[string]uuid.UUID)
+	if err := s.dbRepository.UpdateRecordingStatus(ctx, recordingID, types.RecordingAssigningSpeakers); err != nil {
+		return err
+	}
 
+	mappedSpeakers := make(map[string]uuid.UUID)
 	for _, embedding := range embeddings.Data {
-		speaker, err := s.dbRepository.GetBestMatchikngSpeaker(ctx, embedding.Embedding)
+		var speakerID uuid.UUID
+
+		speaker, err := s.dbRepository.GetBestMatchingSpeaker(ctx, embedding.Embedding)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				// If no speakers returned, insert an unknow speaker.
-				ID, err := s.dbRepository.InsertAnonymousSpeaker(ctx, embedding.Embedding)
-				if err != nil {
-					log.Printf("Failed to insert speaker with label %s: %v", embedding.SpeakerLabel, err)
+				newID, insertErr := s.dbRepository.InsertAnonymousSpeaker(ctx, embedding.Embedding)
+				if insertErr != nil {
+					log.Printf("Failed to insert speaker with label %s: %v", embedding.SpeakerLabel, insertErr)
+					return insertErr
 				}
-				mappedSpeakers[embedding.SpeakerLabel] = ID
+				speakerID = newID
 			} else {
 				log.Printf("error fetching similar speaker: %v", err)
 				return err
 			}
+		} else {
+			speakerID = speaker.ID
+			if err := s.dbRepository.PurgeEmbeddings(ctx, speakerID); err != nil {
+				return err
+			}
 		}
-		if err := s.dbRepository.PurgeEmbeddings(ctx, speaker.ID); err != nil {
-			return err
-		}
-		mappedSpeakers[embedding.SpeakerLabel] = speaker.ID
+
+		mappedSpeakers[embedding.SpeakerLabel] = speakerID
 	}
 
-	// Update segments with speakerID
-	for speakerLabel, speakerID := range mappedSpeakers {
-		if err := s.dbRepository.UpdateSegmentSpeaker(ctx, conversationID, speakerLabel, speakerID); err != nil {
-			return err
-		}
+	if err := s.dbRepository.UpdateRecordingStatus(ctx, recordingID, types.RecordingCompleted); err != nil {
+		return err
+	}
+
+	// Update transcription segments with speakerID
+	for i := range transcription.Segments {
+		transcription.Segments[i].SpeakerID = mappedSpeakers[transcription.Segments[i].Speaker]
+	}
+
+	if err := s.dbRepository.UpdateRecordingStatus(ctx, recordingID, types.RecordingSummaizing); err != nil {
+		return err
 	}
 
 	// Request Summary
@@ -111,8 +115,19 @@ func (s *transcriptionService) ProcessRecording(ctx context.Context, file types.
 		return err
 	}
 
-	// Insert Summary
-	if err := s.dbRepository.UpdateConversationSummary(ctx, summary, conversationID); err != nil {
+	// Insert Data
+	// TODO: Insert in transaction
+	if err = s.dbRepository.WithTx(ctx, func(txCtx context.Context) error {
+		conversationID, err := s.dbRepository.InsertCoversation(ctx, file.Title, transcription, recordingID, summary)
+		if err != nil {
+			return err
+		}
+
+		if err = s.dbRepository.InsertSegments(ctx, transcription.Segments, conversationID); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 

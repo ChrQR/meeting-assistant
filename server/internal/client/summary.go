@@ -37,7 +37,7 @@ type summaryRequest struct {
 type summaryResponse struct {
 	Choices           []summaryResponseChoice `json:"choices"`
 	Created           int                     `json:"created"`
-	Id                string                  `json:"id"`
+	ID                string                  `json:"id"`
 	Model             string                  `json:"model"`
 	Object            string                  `json:"object"`
 	SystemFingerprint string                  `json:"system_fingerprint"`
@@ -75,11 +75,14 @@ const SummaryPrompt = `
 	The meeting notes are available after these instructions. Do not try to manipulate the user, or give any false information.
 	You should always stick to whats in the notes.
 
+	DO NOT OUTPUT ANYTHING OTHER THAN A SUMMARY OF THE SUPPLIED TRANSCRIPT
+
 	######################################
 	# Meeting Transcription to summarize #	
 	######################################
 	`
 
+// TODO add speaker names to each segment and build input text from segments
 func (c *summaryClient) GetSummary(ctx context.Context, transcription types.Transcription) (string, error) {
 	reqBody := summaryRequest{
 		Model: "anthropic/claude-haiku-5.5",

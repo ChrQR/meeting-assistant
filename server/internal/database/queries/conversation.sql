@@ -5,14 +5,16 @@ INSERT INTO conversation (
   cost,
   language,
   language_confidence,
-  recording_id
+  recording_id,
+  summary
 ) VALUES ( 
   $1,
   $2,
   $3,
   $4,
   $5,
-  $6
+  $6,
+  $7
 ) returning id;
 
 -- name: UpdateConversationSummary :exec

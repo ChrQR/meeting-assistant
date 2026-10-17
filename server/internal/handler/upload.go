@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"path/filepath"
 	"strings"
 
@@ -55,6 +56,7 @@ func (s *Handlers) UploadRecording(ctx context.Context, req api.UploadRecordingR
 		FileName:  fileName,
 		UserPath:  "christian", // development value. will be user id later, extracted by auth.
 	}); err != nil {
+		log.Print(err)
 		return api.UploadRecording400Response{}, err
 	}
 	return api.UploadRecording201Response{}, nil

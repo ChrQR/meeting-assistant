@@ -61,8 +61,7 @@ CREATE TABLE segment(
   end_time FLOAT8,
   duration FLOAT8,
   conversation_id UUID NOT NULL,
-  speaker_label VARCHAR(20) NOT NULL,
-  speaker_id UUID,
+  speaker_id UUID NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 

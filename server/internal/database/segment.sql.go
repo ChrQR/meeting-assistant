@@ -6,8 +6,6 @@
 package database
 
 import (
-	"context"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -18,22 +16,5 @@ type InsertSegmentsParams struct {
 	EndTime        pgtype.Float8
 	Duration       pgtype.Float8
 	ConversationID uuid.UUID
-	SpeakerLabel   string
-}
-
-const updateSegmentsSpeaker = `-- name: UpdateSegmentsSpeaker :exec
-UPDATE segment
-  SET speaker_id = $1
-  WHERE speaker_label = $2 and conversation_id = $3
-`
-
-type UpdateSegmentsSpeakerParams struct {
-	SpeakerID      *uuid.UUID
-	SpeakerLabel   string
-	ConversationID uuid.UUID
-}
-
-func (q *Queries) UpdateSegmentsSpeaker(ctx context.Context, arg UpdateSegmentsSpeakerParams) error {
-	_, err := q.db.Exec(ctx, updateSegmentsSpeaker, arg.SpeakerID, arg.SpeakerLabel, arg.ConversationID)
-	return err
+	SpeakerID      uuid.UUID
 }

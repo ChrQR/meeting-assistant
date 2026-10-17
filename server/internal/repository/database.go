@@ -2,10 +2,12 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ChrQR/meeting-assistant/server/internal/database"
 	"github.com/ChrQR/meeting-assistant/server/internal/types"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/pgvector/pgvector-go"
 )
@@ -15,14 +17,14 @@ type dbRepository struct {
 }
 
 type DBRepository interface {
+	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 	InsertRecording(ctx context.Context, recording types.Recording) (uuid.UUID, error)
 	UpdateRecordingStatus(ctx context.Context, recordingID uuid.UUID, status types.RecordingStatus) error
-	InsertCoversation(ctx context.Context, title string, transcriptions types.Transcription, recordingID uuid.UUID) (uuid.UUID, error)
+	InsertCoversation(ctx context.Context, title string, transcriptions types.Transcription, recordingID uuid.UUID, summary string) (uuid.UUID, error)
 	InsertSegments(ctx context.Context, segments []types.TranscriptionSegment, conversationID uuid.UUID) error
-	GetBestMatchikngSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error)
+	GetBestMatchingSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error)
 	InsertAnonymousSpeaker(ctx context.Context, embedding []float32) (uuid.UUID, error)
 	PurgeEmbeddings(ctx context.Context, id uuid.UUID) error
-	UpdateSegmentSpeaker(ctx context.Context, conversationID uuid.UUID, speakerLabel string, speakerID uuid.UUID) error
 	UpdateConversationSummary(ctx context.Context, summary string, conversationID uuid.UUID) error
 }
 
@@ -32,8 +34,35 @@ func NewDBRepository(db *database.DB) DBRepository {
 	}
 }
 
+type txKey struct{}
+
+func (r *dbRepository) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	tx, err := r.db.Conn.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	txCtx := context.WithValue(ctx, txKey{}, tx)
+	if err := fn(txCtx); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *dbRepository) getQueries(ctx context.Context) *database.Queries {
+	if tx, ok := ctx.Value(txKey{}).(pgx.Tx); ok {
+		return r.db.WithTx(tx)
+	}
+	return r.db.Queries
+}
+
 func (r *dbRepository) InsertRecording(ctx context.Context, recording types.Recording) (uuid.UUID, error) {
-	recordingID, err := r.db.InsertRecording(ctx, database.InsertRecordingParams{
+	db := r.getQueries(ctx)
+
+	recordingID, err := db.InsertRecording(ctx, database.InsertRecordingParams{
 		Filename:  recording.FileName,
 		Extension: recording.Extension,
 		Path:      recording.UserPath,
@@ -43,25 +72,32 @@ func (r *dbRepository) InsertRecording(ctx context.Context, recording types.Reco
 }
 
 func (r *dbRepository) UpdateRecordingStatus(ctx context.Context, recordingID uuid.UUID, status types.RecordingStatus) error {
-	return r.db.UpdateRecordingStatus(ctx, database.UpdateRecordingStatusParams{
+	db := r.getQueries(ctx)
+	return db.UpdateRecordingStatus(ctx, database.UpdateRecordingStatusParams{
 		ID:     recordingID,
 		Status: string(status),
 	})
 }
 
-func (r *dbRepository) InsertCoversation(ctx context.Context, title string, transcription types.Transcription, recordingID uuid.UUID) (uuid.UUID, error) {
-	conversationID, err := r.db.InsertConversation(ctx, database.InsertConversationParams{
+func (r *dbRepository) InsertCoversation(ctx context.Context, title string, transcription types.Transcription, recordingID uuid.UUID, summary string) (uuid.UUID, error) {
+	db := r.getQueries(ctx)
+	conversationID, err := db.InsertConversation(ctx, database.InsertConversationParams{
 		Title:              title,
 		Length:             transcription.Duration,
 		Cost:               transcription.Usage.Cost,
 		Language:           transcription.Language,
 		LanguageConfidence: transcription.LanguageConfidence,
 		RecordingID:        recordingID,
+		Summary: pgtype.Text{
+			String: summary,
+			Valid:  true,
+		},
 	})
 	return conversationID, err
 }
 
 func (r *dbRepository) InsertSegments(ctx context.Context, segments []types.TranscriptionSegment, conversationID uuid.UUID) error {
+	db := r.getQueries(ctx)
 	var dbSegments []database.InsertSegmentsParams
 	for _, segment := range segments {
 		dbSegments = append(dbSegments, database.InsertSegmentsParams{
@@ -73,15 +109,16 @@ func (r *dbRepository) InsertSegments(ctx context.Context, segments []types.Tran
 			EndTime:        pgtype.Float8{Float64: segment.End, Valid: true},
 			Duration:       pgtype.Float8{Float64: segment.Duration, Valid: true},
 			ConversationID: conversationID,
-			SpeakerLabel:   segment.Speaker,
+			SpeakerID:      segment.SpeakerID,
 		})
 	}
-	_, err := r.db.InsertSegments(ctx, dbSegments)
+	_, err := db.InsertSegments(ctx, dbSegments)
 	return err
 }
 
-func (r *dbRepository) GetBestMatchikngSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error) {
-	data, err := r.db.GetBestMatchingSpeaker(ctx, pgvector.NewVector(embedding))
+func (r *dbRepository) GetBestMatchingSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error) {
+	db := r.getQueries(ctx)
+	data, err := db.GetBestMatchingSpeaker(ctx, pgvector.NewVector(embedding))
 	return types.IdentifiedSpeaker{
 		ID:              data.SpeakerID,
 		SimilarityScore: data.SimilarityScore,
@@ -89,7 +126,8 @@ func (r *dbRepository) GetBestMatchikngSpeaker(ctx context.Context, embedding []
 }
 
 func (r *dbRepository) InsertAnonymousSpeaker(ctx context.Context, embedding []float32) (uuid.UUID, error) {
-	id, err := r.db.InsertAnonymousSpeaker(ctx)
+	db := r.getQueries(ctx)
+	id, err := db.InsertAnonymousSpeaker(ctx)
 	if err != nil {
 		return id, err
 	}
@@ -105,7 +143,8 @@ func (r *dbRepository) InsertAnonymousSpeaker(ctx context.Context, embedding []f
 }
 
 func (r *dbRepository) PurgeEmbeddings(ctx context.Context, id uuid.UUID) error {
-	count, err := r.db.CountSpeakerEmbeddings(ctx, id)
+	db := r.getQueries(ctx)
+	count, err := db.CountSpeakerEmbeddings(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -117,16 +156,9 @@ func (r *dbRepository) PurgeEmbeddings(ctx context.Context, id uuid.UUID) error 
 	return nil
 }
 
-func (r *dbRepository) UpdateSegmentSpeaker(ctx context.Context, conversationID uuid.UUID, speakerLabel string, speakerID uuid.UUID) error {
-	return r.db.UpdateSegmentsSpeaker(ctx, database.UpdateSegmentsSpeakerParams{
-		SpeakerID:      &speakerID,
-		ConversationID: conversationID,
-		SpeakerLabel:   speakerLabel,
-	})
-}
-
 func (r *dbRepository) UpdateConversationSummary(ctx context.Context, summary string, conversationID uuid.UUID) error {
-	return r.db.UpdateConversationSummary(ctx, database.UpdateConversationSummaryParams{
+	db := r.getQueries(ctx)
+	return db.UpdateConversationSummary(ctx, database.UpdateConversationSummaryParams{
 		Summary: pgtype.Text{
 			String: summary,
 			Valid:  true,
