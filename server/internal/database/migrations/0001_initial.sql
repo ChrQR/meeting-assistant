@@ -38,7 +38,6 @@ CREATE TABLE speaker(
   name TEXT,
   email VARCHAR(64),
   company_id UUID,
-  voice_embedding VECTOR(192),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
@@ -46,8 +45,14 @@ CREATE TABLE speaker(
     REFERENCES company(id)
 );
 
-CREATE INDEX ON speaker USING hnsw (voice_embedding vector_cosine_ops);
+CREATE TABLE speaker_embedding (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  speaker_id UUID NOT NULL REFERENCES speaker(id) ON DELETE CASCADE,
+  embedding VECTOR(192) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
+CREATE INDEX ON speaker_embedding USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 
 CREATE TABLE segment(
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

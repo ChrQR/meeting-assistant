@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const insertConversation = `-- name: InsertConversation :one
@@ -50,4 +51,20 @@ func (q *Queries) InsertConversation(ctx context.Context, arg InsertConversation
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const updateConversationSummary = `-- name: UpdateConversationSummary :exec
+UPDATE conversation
+  SET summary = $1
+  WHERE id = $2
+`
+
+type UpdateConversationSummaryParams struct {
+	Summary pgtype.Text
+	ID      uuid.UUID
+}
+
+func (q *Queries) UpdateConversationSummary(ctx context.Context, arg UpdateConversationSummaryParams) error {
+	_, err := q.db.Exec(ctx, updateConversationSummary, arg.Summary, arg.ID)
+	return err
 }

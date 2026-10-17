@@ -48,17 +48,23 @@ type Segment struct {
 	Duration       pgtype.Float8
 	ConversationID uuid.UUID
 	SpeakerLabel   string
-	SpeakerID      pgtype.UUID
+	SpeakerID      *uuid.UUID
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
 
 type Speaker struct {
-	ID             uuid.UUID
-	Name           pgtype.Text
-	Email          pgtype.Text
-	CompanyID      pgtype.UUID
-	VoiceEmbedding pgvector.Vector
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID        uuid.UUID
+	Name      pgtype.Text
+	Email     pgtype.Text
+	CompanyID *uuid.UUID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type SpeakerEmbedding struct {
+	ID        uuid.UUID
+	SpeakerID uuid.UUID
+	Embedding pgvector.Vector
+	CreatedAt time.Time
 }

@@ -16,6 +16,7 @@ type transcriptionService struct {
 	transcriptionClient client.TranscriptionClient
 	storageClient       client.StorageClient
 	embeddingClient     client.EmbeddingClient
+	summaryClient       client.SummaryClient
 	dbRepository        repository.DBRepository
 }
 
@@ -25,12 +26,16 @@ type TranscriptionService interface {
 
 func NewTranscriptionService(
 	transcriptionClient client.TranscriptionClient,
-	storageClient client.StorageClient, embeddingClient client.EmbeddingClient, dbRepository repository.DBRepository,
+	storageClient client.StorageClient,
+	embeddingClient client.EmbeddingClient,
+	summaryClient client.SummaryClient,
+	dbRepository repository.DBRepository,
 ) TranscriptionService {
 	return &transcriptionService{
 		transcriptionClient,
 		storageClient,
 		embeddingClient,
+		summaryClient,
 		dbRepository,
 	}
 }
@@ -73,7 +78,7 @@ func (s *transcriptionService) ProcessRecording(ctx context.Context, file types.
 	mappedSpeakers := make(map[string]uuid.UUID)
 
 	for _, embedding := range embeddings.Data {
-		speaker, err := s.dbRepository.GetSimilarSpeaker(ctx, embedding.Embedding)
+		speaker, err := s.dbRepository.GetBestMatchikngSpeaker(ctx, embedding.Embedding)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				// If no speakers returned, insert an unknow speaker.
@@ -87,14 +92,29 @@ func (s *transcriptionService) ProcessRecording(ctx context.Context, file types.
 				return err
 			}
 		}
+		if err := s.dbRepository.PurgeEmbeddings(ctx, speaker.ID); err != nil {
+			return err
+		}
 		mappedSpeakers[embedding.SpeakerLabel] = speaker.ID
 	}
 
 	// Update segments with speakerID
+	for speakerLabel, speakerID := range mappedSpeakers {
+		if err := s.dbRepository.UpdateSegmentSpeaker(ctx, conversationID, speakerLabel, speakerID); err != nil {
+			return err
+		}
+	}
 
 	// Request Summary
+	summary, err := s.summaryClient.GetSummary(ctx, transcription)
+	if err != nil {
+		return err
+	}
 
 	// Insert Summary
+	if err := s.dbRepository.UpdateConversationSummary(ctx, summary, conversationID); err != nil {
+		return err
+	}
 
 	return nil
 }

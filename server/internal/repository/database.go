@@ -19,8 +19,11 @@ type DBRepository interface {
 	UpdateRecordingStatus(ctx context.Context, recordingID uuid.UUID, status types.RecordingStatus) error
 	InsertCoversation(ctx context.Context, title string, transcriptions types.Transcription, recordingID uuid.UUID) (uuid.UUID, error)
 	InsertSegments(ctx context.Context, segments []types.TranscriptionSegment, conversationID uuid.UUID) error
-	GetSimilarSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error)
+	GetBestMatchikngSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error)
 	InsertAnonymousSpeaker(ctx context.Context, embedding []float32) (uuid.UUID, error)
+	PurgeEmbeddings(ctx context.Context, id uuid.UUID) error
+	UpdateSegmentSpeaker(ctx context.Context, conversationID uuid.UUID, speakerLabel string, speakerID uuid.UUID) error
+	UpdateConversationSummary(ctx context.Context, summary string, conversationID uuid.UUID) error
 }
 
 func NewDBRepository(db *database.DB) DBRepository {
@@ -77,14 +80,57 @@ func (r *dbRepository) InsertSegments(ctx context.Context, segments []types.Tran
 	return err
 }
 
-func (r *dbRepository) GetSimilarSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error) {
-	data, err := r.db.GetSimilarSpeaker(ctx, pgvector.NewVector(embedding))
+func (r *dbRepository) GetBestMatchikngSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error) {
+	data, err := r.db.GetBestMatchingSpeaker(ctx, pgvector.NewVector(embedding))
 	return types.IdentifiedSpeaker{
-		ID:              data.ID,
+		ID:              data.SpeakerID,
 		SimilarityScore: data.SimilarityScore,
 	}, err
 }
 
 func (r *dbRepository) InsertAnonymousSpeaker(ctx context.Context, embedding []float32) (uuid.UUID, error) {
-	return r.db.InsertAnonymousSpeaker(ctx, pgvector.NewVector(embedding))
+	id, err := r.db.InsertAnonymousSpeaker(ctx)
+	if err != nil {
+		return id, err
+	}
+	_, err = r.db.InsertSpeakerEmbedding(ctx, database.InsertSpeakerEmbeddingParams{
+		SpeakerID: id,
+		Column2:   pgvector.NewVector(embedding),
+	})
+	if err != nil {
+		return id, nil
+	}
+
+	return id, nil
+}
+
+func (r *dbRepository) PurgeEmbeddings(ctx context.Context, id uuid.UUID) error {
+	count, err := r.db.CountSpeakerEmbeddings(ctx, id)
+	if err != nil {
+		return err
+	}
+	if count > 5 {
+		if err := r.db.PruneMostRedundantSpeakerEmbedding(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *dbRepository) UpdateSegmentSpeaker(ctx context.Context, conversationID uuid.UUID, speakerLabel string, speakerID uuid.UUID) error {
+	return r.db.UpdateSegmentsSpeaker(ctx, database.UpdateSegmentsSpeakerParams{
+		SpeakerID:      &speakerID,
+		ConversationID: conversationID,
+		SpeakerLabel:   speakerLabel,
+	})
+}
+
+func (r *dbRepository) UpdateConversationSummary(ctx context.Context, summary string, conversationID uuid.UUID) error {
+	return r.db.UpdateConversationSummary(ctx, database.UpdateConversationSummaryParams{
+		Summary: pgtype.Text{
+			String: summary,
+			Valid:  true,
+		},
+		ID: conversationID,
+	})
 }

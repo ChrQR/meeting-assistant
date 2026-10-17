@@ -7,45 +7,123 @@ package database
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/pgvector/pgvector-go"
 )
 
-const getSimilarSpeaker = `-- name: GetSimilarSpeaker :one
+const countSpeakerEmbeddings = `-- name: CountSpeakerEmbeddings :one
+SELECT COUNT(*)
+FROM speaker_embedding
+WHERE speaker_id = $1
+`
+
+func (q *Queries) CountSpeakerEmbeddings(ctx context.Context, speakerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSpeakerEmbeddings, speakerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getBestMatchingSpeaker = `-- name: GetBestMatchingSpeaker :one
 SELECT 
-  id,
-  voice_embedding,
-  (1.0::float8 - (voice_embedding <=> $1::vector))::float8 AS similarity_score
+  s.id speaker_id,
+  s.name,
+  (1.0::float8 - (se.embedding <=> $1::vector))::float8 AS similarity_score
 FROM
-  speaker
+  speaker_embedding se
+JOIN
+  speaker s ON s.id = se.speaker_id
 ORDER BY
-  voice_embedding <=> $1::vector ASC
+  se.embedding <=> $1::vector ASC
 LIMIT 1
 `
 
-type GetSimilarSpeakerRow struct {
-	ID              uuid.UUID
-	VoiceEmbedding  pgvector.Vector
+type GetBestMatchingSpeakerRow struct {
+	SpeakerID       uuid.UUID
+	Name            pgtype.Text
 	SimilarityScore float64
 }
 
-func (q *Queries) GetSimilarSpeaker(ctx context.Context, dollar_1 pgvector.Vector) (GetSimilarSpeakerRow, error) {
-	row := q.db.QueryRow(ctx, getSimilarSpeaker, dollar_1)
-	var i GetSimilarSpeakerRow
-	err := row.Scan(&i.ID, &i.VoiceEmbedding, &i.SimilarityScore)
+func (q *Queries) GetBestMatchingSpeaker(ctx context.Context, dollar_1 pgvector.Vector) (GetBestMatchingSpeakerRow, error) {
+	row := q.db.QueryRow(ctx, getBestMatchingSpeaker, dollar_1)
+	var i GetBestMatchingSpeakerRow
+	err := row.Scan(&i.SpeakerID, &i.Name, &i.SimilarityScore)
 	return i, err
 }
 
 const insertAnonymousSpeaker = `-- name: InsertAnonymousSpeaker :one
 INSERT INTO speaker (
-  voice_embedding
-) VALUES ( $1 ) returning id
+  name
+) VALUES ( NULL ) returning id
 `
 
-func (q *Queries) InsertAnonymousSpeaker(ctx context.Context, voiceEmbedding pgvector.Vector) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, insertAnonymousSpeaker, voiceEmbedding)
+func (q *Queries) InsertAnonymousSpeaker(ctx context.Context) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertAnonymousSpeaker)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertSpeakerEmbedding = `-- name: InsertSpeakerEmbedding :one
+INSERT INTO speaker_embedding (speaker_id, embedding)
+VALUES ($1, $2::vector)
+RETURNING id, speaker_id, created_at
+`
+
+type InsertSpeakerEmbeddingParams struct {
+	SpeakerID uuid.UUID
+	Column2   pgvector.Vector
+}
+
+type InsertSpeakerEmbeddingRow struct {
+	ID        uuid.UUID
+	SpeakerID uuid.UUID
+	CreatedAt time.Time
+}
+
+func (q *Queries) InsertSpeakerEmbedding(ctx context.Context, arg InsertSpeakerEmbeddingParams) (InsertSpeakerEmbeddingRow, error) {
+	row := q.db.QueryRow(ctx, insertSpeakerEmbedding, arg.SpeakerID, arg.Column2)
+	var i InsertSpeakerEmbeddingRow
+	err := row.Scan(&i.ID, &i.SpeakerID, &i.CreatedAt)
+	return i, err
+}
+
+const pruneMostRedundantSpeakerEmbedding = `-- name: PruneMostRedundantSpeakerEmbedding :exec
+WITH pairwise_distances AS (
+    SELECT 
+        a.id AS id_a,
+        b.id AS id_b,
+        a.embedding <=> b.embedding AS dist,
+        a.created_at AS created_a,
+        b.created_at AS created_b
+    FROM 
+        speaker_embedding a
+    JOIN 
+        speaker_embedding b 
+      ON a.speaker_id = b.speaker_id 
+     AND a.id < b.id -- ensures each pair is compared exactly once and avoids self-comparison
+    WHERE 
+        a.speaker_id = $1
+    ORDER BY 
+        dist ASC
+    LIMIT 1
+)
+DELETE FROM speaker_embedding
+WHERE id = (
+    SELECT 
+        -- Drop the more recently added vector of the two
+        CASE 
+            WHEN created_a >= created_b THEN id_a 
+            ELSE id_b 
+        END
+    FROM pairwise_distances
+)
+`
+
+func (q *Queries) PruneMostRedundantSpeakerEmbedding(ctx context.Context, speakerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, pruneMostRedundantSpeakerEmbedding, speakerID)
+	return err
 }

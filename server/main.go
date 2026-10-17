@@ -45,8 +45,15 @@ func main() {
 	dbRepository := repository.NewDBRepository(db)
 	transciptionClient := client.NewTranscriptionClient(openrouterAPIKey)
 	embeddingClient := client.NewEmbeddingClient(embeddingServiceURL)
+	summaryClient := client.NewSummaryClient(openrouterAPIKey)
 
-	transcriptionService := service.NewTranscriptionService(transciptionClient, storageClient, embeddingClient, dbRepository)
+	transcriptionService := service.NewTranscriptionService(
+		transciptionClient,
+		storageClient,
+		embeddingClient,
+		summaryClient,
+		dbRepository,
+	)
 
 	server := server.NewServer(transcriptionService)
 	if err := server.Run(); err != nil {
