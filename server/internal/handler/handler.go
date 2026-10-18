@@ -7,6 +7,7 @@ import (
 
 type Handlers struct {
 	TranscriptionService service.TranscriptionService
+	StoreService         service.StoreService
 }
 
 var _ api.StrictServerInterface = (*Handlers)(nil)

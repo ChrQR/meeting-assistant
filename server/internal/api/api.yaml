@@ -6,9 +6,35 @@ info:
 paths:
   /recordings:
     summary: Endpoint for managing recordings
+    get:
+      tags:
+        - recordings
+      operationId: GetRecordings
+      description: Get all recordings associated with the user.
+      responses:
+        "200":
+          description: succesfully fetched all recordings
+          content:
+            "application/json":
+              schema:
+                type: array
+                items:
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    filename:
+                      type: string
+                    extension:
+                      type: string
+                    status:
+                      type: string
+
+        "500":
+          description: internal error
     post:
       tags:
-        - recording
+        - recordings
       operationId: UploadRecording
       description: endpoint for uploading audio recording for transcription.
       requestBody:

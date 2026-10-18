@@ -4,7 +4,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -25,6 +27,9 @@ type UploadRecordingMultipartRequestBody UploadRecordingMultipartBody
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
+	// (GET /recordings)
+	GetRecordings(w http.ResponseWriter, r *http.Request)
+
 	// (POST /recordings)
 	UploadRecording(w http.ResponseWriter, r *http.Request)
 }
@@ -32,6 +37,11 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// (GET /recordings)
+func (_ Unimplemented) GetRecordings(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // (POST /recordings)
 func (_ Unimplemented) UploadRecording(w http.ResponseWriter, r *http.Request) {
@@ -46,6 +56,20 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetRecordings operation middleware
+func (siw *ServerInterfaceWrapper) GetRecordings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRecordings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // UploadRecording operation middleware
 func (siw *ServerInterfaceWrapper) UploadRecording(w http.ResponseWriter, r *http.Request) {
@@ -175,10 +199,47 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/recordings", wrapper.GetRecordings)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/recordings", wrapper.UploadRecording)
 	})
 
 	return r
+}
+
+type GetRecordingsRequestObject struct {
+}
+
+type GetRecordingsResponseObject interface {
+	VisitGetRecordingsResponse(w http.ResponseWriter) error
+}
+
+type GetRecordings200JSONResponse []struct {
+	Extension *string             `json:"extension,omitempty"`
+	Filename  *string             `json:"filename,omitempty"`
+	Id        *openapi_types.UUID `json:"id,omitempty"`
+	Status    *string             `json:"status,omitempty"`
+}
+
+func (response GetRecordings200JSONResponse) VisitGetRecordingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecordings500Response struct {
+}
+
+func (response GetRecordings500Response) VisitGetRecordingsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(500)
+	return nil
 }
 
 type UploadRecordingRequestObject struct {
@@ -224,6 +285,9 @@ func (response UploadRecording500Response) VisitUploadRecordingResponse(w http.R
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
+	// (GET /recordings)
+	GetRecordings(ctx context.Context, request GetRecordingsRequestObject) (GetRecordingsResponseObject, error)
+
 	// (POST /recordings)
 	UploadRecording(ctx context.Context, request UploadRecordingRequestObject) (UploadRecordingResponseObject, error)
 }
@@ -265,6 +329,30 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// GetRecordings operation middleware
+func (sh *strictHandler) GetRecordings(w http.ResponseWriter, r *http.Request) {
+	var request GetRecordingsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRecordings(ctx, request.(GetRecordingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRecordings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRecordingsResponseObject); ok {
+		if err := validResponse.VisitGetRecordingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // UploadRecording operation middleware

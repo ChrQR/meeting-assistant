@@ -55,7 +55,9 @@ func main() {
 		dbRepository,
 	)
 
-	server := server.NewServer(transcriptionService)
+	storeService := service.NewStoreService(dbRepository)
+
+	server := server.NewServer(transcriptionService, storeService)
 	if err := server.Run(); err != nil {
 		log.Fatal(err)
 	}

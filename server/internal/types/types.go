@@ -147,3 +147,10 @@ type IdentifiedSpeaker struct {
 	ID              uuid.UUID
 	SimilarityScore float64
 }
+
+type SelectRecording struct {
+	ID        uuid.UUID
+	Extension string
+	Filename  string
+	Status    RecordingStatus
+}

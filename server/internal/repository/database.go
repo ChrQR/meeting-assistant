@@ -26,6 +26,7 @@ type DBRepository interface {
 	InsertAnonymousSpeaker(ctx context.Context, embedding []float32) (uuid.UUID, error)
 	PurgeEmbeddings(ctx context.Context, id uuid.UUID) error
 	UpdateConversationSummary(ctx context.Context, summary string, conversationID uuid.UUID) error
+	GetRecordings(ctx context.Context) ([]types.SelectRecording, error)
 }
 
 func NewDBRepository(db *database.DB) DBRepository {
@@ -165,4 +166,22 @@ func (r *dbRepository) UpdateConversationSummary(ctx context.Context, summary st
 		},
 		ID: conversationID,
 	})
+}
+
+func (r *dbRepository) GetRecordings(ctx context.Context) ([]types.SelectRecording, error) {
+	db := r.getQueries(ctx)
+	recs, err := db.GetRecordings(ctx)
+	if err != nil {
+		return []types.SelectRecording{}, err
+	}
+	var data []types.SelectRecording
+	for _, rec := range recs {
+		data = append(data, types.SelectRecording{
+			ID:        rec.ID,
+			Extension: rec.Extension,
+			Filename:  rec.Filename,
+			Status:    types.RecordingStatus(rec.Status),
+		})
+	}
+	return data, nil
 }

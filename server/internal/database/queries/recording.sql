@@ -15,3 +15,6 @@ INSERT INTO recording (
 UPDATE recording
   SET status = $2
   WHERE id = $1;
+
+-- name: GetRecordings :many
+SELECT * FROM recording;

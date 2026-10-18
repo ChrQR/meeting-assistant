@@ -11,6 +11,36 @@ import (
 	"github.com/google/uuid"
 )
 
+const getRecordings = `-- name: GetRecordings :many
+SELECT id, path, extension, filename, status FROM recording
+`
+
+func (q *Queries) GetRecordings(ctx context.Context) ([]Recording, error) {
+	rows, err := q.db.Query(ctx, getRecordings)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Recording
+	for rows.Next() {
+		var i Recording
+		if err := rows.Scan(
+			&i.ID,
+			&i.Path,
+			&i.Extension,
+			&i.Filename,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertRecording = `-- name: InsertRecording :one
 INSERT INTO recording (
   path,

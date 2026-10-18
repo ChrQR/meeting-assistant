@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/ChrQR/meeting-assistant/server/internal/api"
 	"github.com/ChrQR/meeting-assistant/server/internal/types"
 )
@@ -60,4 +62,29 @@ func (s *Handlers) UploadRecording(ctx context.Context, req api.UploadRecordingR
 		return api.UploadRecording400Response{}, err
 	}
 	return api.UploadRecording201Response{}, nil
+}
+
+func (s *Handlers) GetRecordings(ctx context.Context, req api.GetRecordingsRequestObject) (api.GetRecordingsResponseObject, error) {
+	data, err := s.StoreService.GetRecordings(ctx)
+	if err != nil {
+		return api.GetRecordings500Response{}, err
+	}
+
+	result := make(api.GetRecordings200JSONResponse, 0, len(data))
+
+	for _, rec := range data {
+		result = append(result, struct {
+			Extension *string    `json:"extension,omitempty"`
+			Filename  *string    `json:"filename,omitempty"`
+			Id        *uuid.UUID `json:"id,omitempty"`
+			Status    *string    `json:"status,omitempty"`
+		}{
+			Extension: &rec.Extension,
+			Filename:  &rec.Filename,
+			Status:    new(string(rec.Status)),
+			Id:        &rec.ID,
+		})
+	}
+
+	return result, nil
 }
