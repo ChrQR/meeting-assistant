@@ -4,6 +4,117 @@ info:
   title: meeting-assistant-api
   version: 0.1.0
 paths:
+  /conversations:
+    summary: Collection of endpoints for managing conversations
+    get:
+      tags:
+        - conversations
+      operationId: GetConversationsList
+      description: Get list of all conversations
+      responses:
+        "200":
+          description: succesfully fetched all conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    title:
+                      type: string
+                    summary:
+                      type: string
+                    length:
+                      type: number
+                      format: float
+                    language:
+                      type: string
+                    language_confidence:
+                      type: number
+                      format: float
+                    recording_id:
+                      type: string
+                      format: uuid
+                    created_at:
+                      type: string
+                      format: date-time
+                    updated_at:
+                      type: string
+                      format: date-time
+  /conversations/{conversationId}:
+    summary: fetch conversation with segments and speakers assigned
+    get:
+      tags:
+        - conversations
+      operationId: GetConversationWithSegments
+      description: Get conversation by id with segments and speaker
+      parameters:
+        - in: path
+          name: conversationId
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: UUID of the conversation to get
+      responses:
+        "200":
+          description: succesfully fetched all conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    title:
+                      type: string
+                    summary:
+                      type: string
+                    length:
+                      type: number
+                      format: float
+                    language:
+                      type: string
+                    language_confidence:
+                      type: number
+                      format: float
+                    recording_id:
+                      type: string
+                      format: uuid
+                    segments:
+                      type: array
+                      items:
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          text:
+                            type: string
+                          start_time:
+                            type: number
+                            format: float
+                          end_time:
+                            type: number
+                            format: float
+                          duration:
+                            type: number
+                            format: float
+                          speaker_id:
+                            type: string
+                            format: uuid
+                          speaker_name:
+                            type: string
+                    created_at:
+                      type: string
+                      format: date-time
+                    updated_at:
+                      type: string
+                      format: date-time
   /recordings:
     summary: Endpoint for managing recordings
     get:

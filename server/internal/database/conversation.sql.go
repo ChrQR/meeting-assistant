@@ -9,8 +9,42 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const getAllConversations = `-- name: GetAllConversations :many
+SELECT id, title, summary, length, cost, language, language_confidence, recording_id, created_at, updated_at FROM conversation
+`
+
+func (q *Queries) GetAllConversations(ctx context.Context) ([]Conversation, error) {
+	rows, err := q.db.Query(ctx, getAllConversations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Conversation
+	for rows.Next() {
+		var i Conversation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Summary,
+			&i.Length,
+			&i.Cost,
+			&i.Language,
+			&i.LanguageConfidence,
+			&i.RecordingID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const insertConversation = `-- name: InsertConversation :one
 INSERT INTO conversation (
@@ -39,7 +73,7 @@ type InsertConversationParams struct {
 	Language           string
 	LanguageConfidence float64
 	RecordingID        uuid.UUID
-	Summary            pgtype.Text
+	Summary            string
 }
 
 func (q *Queries) InsertConversation(ctx context.Context, arg InsertConversationParams) (uuid.UUID, error) {
@@ -57,6 +91,29 @@ func (q *Queries) InsertConversation(ctx context.Context, arg InsertConversation
 	return id, err
 }
 
+const selectConversationByID = `-- name: SelectConversationByID :one
+SELECT id, title, summary, length, cost, language, language_confidence, recording_id, created_at, updated_at FROM conversation
+WHERE id = $1
+`
+
+func (q *Queries) SelectConversationByID(ctx context.Context, id uuid.UUID) (Conversation, error) {
+	row := q.db.QueryRow(ctx, selectConversationByID, id)
+	var i Conversation
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Summary,
+		&i.Length,
+		&i.Cost,
+		&i.Language,
+		&i.LanguageConfidence,
+		&i.RecordingID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateConversationSummary = `-- name: UpdateConversationSummary :exec
 UPDATE conversation
   SET summary = $1
@@ -64,7 +121,7 @@ UPDATE conversation
 `
 
 type UpdateConversationSummaryParams struct {
-	Summary pgtype.Text
+	Summary string
 	ID      uuid.UUID
 }
 

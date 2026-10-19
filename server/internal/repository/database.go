@@ -25,8 +25,8 @@ type DBRepository interface {
 	GetBestMatchingSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error)
 	InsertAnonymousSpeaker(ctx context.Context, embedding []float32) (uuid.UUID, error)
 	PurgeEmbeddings(ctx context.Context, id uuid.UUID) error
-	UpdateConversationSummary(ctx context.Context, summary string, conversationID uuid.UUID) error
 	GetRecordings(ctx context.Context) ([]types.SelectRecording, error)
+	GetAllConversations(ctx context.Context) ([]types.SelectConversation, error)
 }
 
 func NewDBRepository(db *database.DB) DBRepository {
@@ -157,17 +157,6 @@ func (r *dbRepository) PurgeEmbeddings(ctx context.Context, id uuid.UUID) error 
 	return nil
 }
 
-func (r *dbRepository) UpdateConversationSummary(ctx context.Context, summary string, conversationID uuid.UUID) error {
-	db := r.getQueries(ctx)
-	return db.UpdateConversationSummary(ctx, database.UpdateConversationSummaryParams{
-		Summary: pgtype.Text{
-			String: summary,
-			Valid:  true,
-		},
-		ID: conversationID,
-	})
-}
-
 func (r *dbRepository) GetRecordings(ctx context.Context) ([]types.SelectRecording, error) {
 	db := r.getQueries(ctx)
 	recs, err := db.GetRecordings(ctx)
@@ -184,4 +173,27 @@ func (r *dbRepository) GetRecordings(ctx context.Context) ([]types.SelectRecordi
 		})
 	}
 	return data, nil
+}
+
+func (r *dbRepository) GetAllConversations(ctx context.Context) ([]types.SelectConversation, error) {
+	data, err := r.db.GetAllConversations(ctx)
+	if err != nil {
+		return []types.SelectConversation{}, nil
+	}
+	var result []types.SelectConversation
+	for _, conv := range data {
+		result = append(result, types.SelectConversation{
+			ID:                 conv.ID,
+			Title:              conv.Title,
+			Summary:            conv.Summary,
+			Length:             conv.Length,
+			Cost:               conv.Length,
+			Language:           conv.Language,
+			LanguageConfidence: conv.LanguageConfidence,
+			RecordingID:        conv.RecordingID,
+			CreatedAt:          conv.CreatedAt,
+			UpdatedAt:          conv.UpdatedAt,
+		})
+	}
+	return result, nil
 }

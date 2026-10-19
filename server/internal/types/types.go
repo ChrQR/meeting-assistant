@@ -3,6 +3,7 @@ package types
 import (
 	"log"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -153,4 +154,17 @@ type SelectRecording struct {
 	Extension string
 	Filename  string
 	Status    RecordingStatus
+}
+
+type SelectConversation struct {
+	ID                 uuid.UUID
+	Title              string
+	Summary            string
+	Length             float64
+	Cost               float64
+	Language           string
+	LanguageConfidence float64
+	RecordingID        uuid.UUID
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }

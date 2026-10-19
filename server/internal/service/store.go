@@ -15,6 +15,7 @@ type storeService struct {
 
 type StoreService interface {
 	GetRecordings(ctx context.Context) ([]types.SelectRecording, error)
+	GetConversationList(ctx context.Context) ([]types.SelectConversation, error)
 }
 
 func NewStoreService(dbRepository repository.DBRepository) StoreService {
@@ -33,4 +34,8 @@ func (s *storeService) GetRecordings(ctx context.Context) ([]types.SelectRecordi
 		}
 	}
 	return recordings, nil
+}
+
+func (s *storeService) GetConversationList(ctx context.Context) ([]types.SelectConversation, error) {
+	return s.dbRepository.GetAllConversations(ctx)
 }

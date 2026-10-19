@@ -22,7 +22,7 @@ type Company struct {
 type Conversation struct {
 	ID                 uuid.UUID
 	Title              string
-	Summary            pgtype.Text
+	Summary            string
 	Length             float64
 	Cost               float64
 	Language           string

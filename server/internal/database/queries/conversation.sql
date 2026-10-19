@@ -21,3 +21,10 @@ INSERT INTO conversation (
 UPDATE conversation
   SET summary = $1
   WHERE id = $2;
+
+-- name: GetAllConversations :many
+SELECT * FROM conversation;
+
+-- name: SelectConversationByID :one
+SELECT * FROM conversation
+WHERE id = $1;

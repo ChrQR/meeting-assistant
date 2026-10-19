@@ -20,7 +20,7 @@ CREATE TABLE recording(
 CREATE TABLE conversation(
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
-  summary TEXT,
+  summary TEXT NOT NULL,
   length FLOAT8 NOT NULL,
   cost FLOAT8 NOT NULL,
   language VARCHAR(10) NOT NULL,

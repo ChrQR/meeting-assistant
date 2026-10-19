@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -27,6 +29,12 @@ type UploadRecordingMultipartRequestBody UploadRecordingMultipartBody
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
+	// (GET /conversations)
+	GetConversationsList(w http.ResponseWriter, r *http.Request)
+
+	// (GET /conversations/{conversationId})
+	GetConversationWithSegments(w http.ResponseWriter, r *http.Request, conversationId openapi_types.UUID)
+
 	// (GET /recordings)
 	GetRecordings(w http.ResponseWriter, r *http.Request)
 
@@ -37,6 +45,16 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// (GET /conversations)
+func (_ Unimplemented) GetConversationsList(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /conversations/{conversationId})
+func (_ Unimplemented) GetConversationWithSegments(w http.ResponseWriter, r *http.Request, conversationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // (GET /recordings)
 func (_ Unimplemented) GetRecordings(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +74,46 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetConversationsList operation middleware
+func (siw *ServerInterfaceWrapper) GetConversationsList(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConversationsList(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetConversationWithSegments operation middleware
+func (siw *ServerInterfaceWrapper) GetConversationWithSegments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "conversationId" -------------
+	var conversationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "conversationId", chi.URLParam(r, "conversationId"), &conversationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "conversationId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConversationWithSegments(w, r, conversationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetRecordings operation middleware
 func (siw *ServerInterfaceWrapper) GetRecordings(w http.ResponseWriter, r *http.Request) {
@@ -199,6 +257,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/conversations", wrapper.GetConversationsList)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/conversations/{conversationId}", wrapper.GetConversationWithSegments)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/recordings", wrapper.GetRecordings)
 	})
 	r.Group(func(r chi.Router) {
@@ -206,6 +270,78 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 
 	return r
+}
+
+type GetConversationsListRequestObject struct {
+}
+
+type GetConversationsListResponseObject interface {
+	VisitGetConversationsListResponse(w http.ResponseWriter) error
+}
+
+type GetConversationsList200JSONResponse []struct {
+	CreatedAt          *time.Time          `json:"created_at,omitempty"`
+	Id                 *openapi_types.UUID `json:"id,omitempty"`
+	Language           *string             `json:"language,omitempty"`
+	LanguageConfidence *float32            `json:"language_confidence,omitempty"`
+	Length             *float32            `json:"length,omitempty"`
+	RecordingId        *openapi_types.UUID `json:"recording_id,omitempty"`
+	Summary            *string             `json:"summary,omitempty"`
+	Title              *string             `json:"title,omitempty"`
+	UpdatedAt          *time.Time          `json:"updated_at,omitempty"`
+}
+
+func (response GetConversationsList200JSONResponse) VisitGetConversationsListResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetConversationWithSegmentsRequestObject struct {
+	ConversationId openapi_types.UUID `json:"conversationId"`
+}
+
+type GetConversationWithSegmentsResponseObject interface {
+	VisitGetConversationWithSegmentsResponse(w http.ResponseWriter) error
+}
+
+type GetConversationWithSegments200JSONResponse []struct {
+	CreatedAt          *time.Time          `json:"created_at,omitempty"`
+	Id                 *openapi_types.UUID `json:"id,omitempty"`
+	Language           *string             `json:"language,omitempty"`
+	LanguageConfidence *float32            `json:"language_confidence,omitempty"`
+	Length             *float32            `json:"length,omitempty"`
+	RecordingId        *openapi_types.UUID `json:"recording_id,omitempty"`
+	Segments           *[]struct {
+		Duration    *float32            `json:"duration,omitempty"`
+		EndTime     *float32            `json:"end_time,omitempty"`
+		Id          *openapi_types.UUID `json:"id,omitempty"`
+		SpeakerId   *openapi_types.UUID `json:"speaker_id,omitempty"`
+		SpeakerName *string             `json:"speaker_name,omitempty"`
+		StartTime   *float32            `json:"start_time,omitempty"`
+		Text        *string             `json:"text,omitempty"`
+	} `json:"segments,omitempty"`
+	Summary   *string    `json:"summary,omitempty"`
+	Title     *string    `json:"title,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
+func (response GetConversationWithSegments200JSONResponse) VisitGetConversationWithSegmentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type GetRecordingsRequestObject struct {
@@ -285,6 +421,12 @@ func (response UploadRecording500Response) VisitUploadRecordingResponse(w http.R
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
+	// (GET /conversations)
+	GetConversationsList(ctx context.Context, request GetConversationsListRequestObject) (GetConversationsListResponseObject, error)
+
+	// (GET /conversations/{conversationId})
+	GetConversationWithSegments(ctx context.Context, request GetConversationWithSegmentsRequestObject) (GetConversationWithSegmentsResponseObject, error)
+
 	// (GET /recordings)
 	GetRecordings(ctx context.Context, request GetRecordingsRequestObject) (GetRecordingsResponseObject, error)
 
@@ -329,6 +471,56 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// GetConversationsList operation middleware
+func (sh *strictHandler) GetConversationsList(w http.ResponseWriter, r *http.Request) {
+	var request GetConversationsListRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetConversationsList(ctx, request.(GetConversationsListRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetConversationsList")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetConversationsListResponseObject); ok {
+		if err := validResponse.VisitGetConversationsListResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetConversationWithSegments operation middleware
+func (sh *strictHandler) GetConversationWithSegments(w http.ResponseWriter, r *http.Request, conversationId openapi_types.UUID) {
+	var request GetConversationWithSegmentsRequestObject
+
+	request.ConversationId = conversationId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetConversationWithSegments(ctx, request.(GetConversationWithSegmentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetConversationWithSegments")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetConversationWithSegmentsResponseObject); ok {
+		if err := validResponse.VisitGetConversationWithSegmentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetRecordings operation middleware

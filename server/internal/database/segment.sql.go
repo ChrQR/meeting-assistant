@@ -6,9 +6,71 @@
 package database
 
 import (
+	"context"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const getSegmentsWithSpeakerNameByConversationID = `-- name: GetSegmentsWithSpeakerNameByConversationID :many
+SELECT 
+  seg.id,
+  seg.text,
+  seg.start_time,
+  seg.end_time,
+  seg.duration,
+  seg.speaker_id,
+  sp.name as speaker_name,
+  seg.created_at,
+  seg.updated_at
+FROM segment seg
+JOIN speaker sp on seg.speaker_id = sp.id
+WHERE seg.conversation_id = $1
+ORDER BY seg.start_time ASC
+`
+
+type GetSegmentsWithSpeakerNameByConversationIDRow struct {
+	ID          uuid.UUID
+	Text        pgtype.Text
+	StartTime   pgtype.Float8
+	EndTime     pgtype.Float8
+	Duration    pgtype.Float8
+	SpeakerID   uuid.UUID
+	SpeakerName pgtype.Text
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func (q *Queries) GetSegmentsWithSpeakerNameByConversationID(ctx context.Context, conversationID uuid.UUID) ([]GetSegmentsWithSpeakerNameByConversationIDRow, error) {
+	rows, err := q.db.Query(ctx, getSegmentsWithSpeakerNameByConversationID, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSegmentsWithSpeakerNameByConversationIDRow
+	for rows.Next() {
+		var i GetSegmentsWithSpeakerNameByConversationIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Text,
+			&i.StartTime,
+			&i.EndTime,
+			&i.Duration,
+			&i.SpeakerID,
+			&i.SpeakerName,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 type InsertSegmentsParams struct {
 	Text           pgtype.Text
