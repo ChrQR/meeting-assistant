@@ -27,6 +27,21 @@ func (q *Queries) CountSpeakerEmbeddings(ctx context.Context, speakerID uuid.UUI
 	return count, err
 }
 
+const deleteSpeaker = `-- name: DeleteSpeaker :exec
+DELETE FROM speaker
+WHERE id = $1 AND owner_id = $2
+`
+
+type DeleteSpeakerParams struct {
+	ID      uuid.UUID
+	OwnerID *uuid.UUID
+}
+
+func (q *Queries) DeleteSpeaker(ctx context.Context, arg DeleteSpeakerParams) error {
+	_, err := q.db.Exec(ctx, deleteSpeaker, arg.ID, arg.OwnerID)
+	return err
+}
+
 const getBestMatchingSpeaker = `-- name: GetBestMatchingSpeaker :one
 SELECT 
   s.id speaker_id,
@@ -36,10 +51,19 @@ FROM
   speaker_embedding se
 JOIN
   speaker s ON s.id = se.speaker_id
+WHERE
+  s.owner_id = $2::uuid
+  AND (1.0::float8 - (se.embedding <=> $1::vector)) >= $3::float8
 ORDER BY
   se.embedding <=> $1::vector ASC
 LIMIT 1
 `
+
+type GetBestMatchingSpeakerParams struct {
+	Column1       pgvector.Vector
+	OwnerID       uuid.UUID
+	MinSimilarity float64
+}
 
 type GetBestMatchingSpeakerRow struct {
 	SpeakerID       uuid.UUID
@@ -47,21 +71,219 @@ type GetBestMatchingSpeakerRow struct {
 	SimilarityScore float64
 }
 
-func (q *Queries) GetBestMatchingSpeaker(ctx context.Context, dollar_1 pgvector.Vector) (GetBestMatchingSpeakerRow, error) {
-	row := q.db.QueryRow(ctx, getBestMatchingSpeaker, dollar_1)
+// Voice matching is scoped to the user's own speakers so embeddings never
+// match a voice from another account.
+func (q *Queries) GetBestMatchingSpeaker(ctx context.Context, arg GetBestMatchingSpeakerParams) (GetBestMatchingSpeakerRow, error) {
+	row := q.db.QueryRow(ctx, getBestMatchingSpeaker, arg.Column1, arg.OwnerID, arg.MinSimilarity)
 	var i GetBestMatchingSpeakerRow
 	err := row.Scan(&i.SpeakerID, &i.Name, &i.SimilarityScore)
 	return i, err
 }
 
-const insertAnonymousSpeaker = `-- name: InsertAnonymousSpeaker :one
-INSERT INTO speaker (
-  name
-) VALUES ( NULL ) returning id
+const getSpeaker = `-- name: GetSpeaker :one
+SELECT
+  sp.id,
+  sp.name,
+  sp.email,
+  sp.company_id,
+  c.name AS company_name,
+  sp.linked_user_id,
+  u.email AS user_email,
+  COUNT(DISTINCT se.id)::int AS embedding_count,
+  COUNT(DISTINCT s.id)::int AS segment_count,
+  COALESCE(SUM(s.duration) FILTER (WHERE s.id IS NOT NULL), 0)::float8 AS total_speaking_time,
+  COUNT(DISTINCT s.conversation_id)::int AS conversation_count,
+  sp.created_at
+FROM speaker sp
+LEFT JOIN company c ON c.id = sp.company_id
+LEFT JOIN app_user u ON u.id = sp.linked_user_id
+LEFT JOIN speaker_embedding se ON se.speaker_id = sp.id
+LEFT JOIN segment s ON s.speaker_id = sp.id AND NOT s.ignored
+WHERE sp.id = $1 AND sp.owner_id = $2
+GROUP BY sp.id, c.name, u.email
 `
 
-func (q *Queries) InsertAnonymousSpeaker(ctx context.Context) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, insertAnonymousSpeaker)
+type GetSpeakerParams struct {
+	ID      uuid.UUID
+	OwnerID *uuid.UUID
+}
+
+type GetSpeakerRow struct {
+	ID                uuid.UUID
+	Name              pgtype.Text
+	Email             pgtype.Text
+	CompanyID         *uuid.UUID
+	CompanyName       pgtype.Text
+	LinkedUserID      *uuid.UUID
+	UserEmail         pgtype.Text
+	EmbeddingCount    int32
+	SegmentCount      int32
+	TotalSpeakingTime float64
+	ConversationCount int32
+	CreatedAt         time.Time
+}
+
+func (q *Queries) GetSpeaker(ctx context.Context, arg GetSpeakerParams) (GetSpeakerRow, error) {
+	row := q.db.QueryRow(ctx, getSpeaker, arg.ID, arg.OwnerID)
+	var i GetSpeakerRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.CompanyID,
+		&i.CompanyName,
+		&i.LinkedUserID,
+		&i.UserEmail,
+		&i.EmbeddingCount,
+		&i.SegmentCount,
+		&i.TotalSpeakingTime,
+		&i.ConversationCount,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSpeakerEmbeddings = `-- name: GetSpeakerEmbeddings :many
+SELECT id, created_at
+FROM speaker_embedding
+WHERE speaker_id = $1
+ORDER BY created_at ASC
+`
+
+type GetSpeakerEmbeddingsRow struct {
+	ID        uuid.UUID
+	CreatedAt time.Time
+}
+
+func (q *Queries) GetSpeakerEmbeddings(ctx context.Context, speakerID uuid.UUID) ([]GetSpeakerEmbeddingsRow, error) {
+	rows, err := q.db.Query(ctx, getSpeakerEmbeddings, speakerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSpeakerEmbeddingsRow
+	for rows.Next() {
+		var i GetSpeakerEmbeddingsRow
+		if err := rows.Scan(&i.ID, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSpeakers = `-- name: GetSpeakers :many
+SELECT
+  sp.id,
+  sp.name,
+  sp.email,
+  sp.company_id,
+  c.name AS company_name,
+  sp.linked_user_id,
+  u.email AS user_email,
+  COUNT(DISTINCT se.id)::int AS embedding_count,
+  COUNT(DISTINCT s.id)::int AS segment_count,
+  COALESCE(SUM(s.duration) FILTER (WHERE s.id IS NOT NULL), 0)::float8 AS total_speaking_time,
+  COUNT(DISTINCT s.conversation_id)::int AS conversation_count,
+  sp.created_at
+FROM speaker sp
+LEFT JOIN company c ON c.id = sp.company_id
+LEFT JOIN app_user u ON u.id = sp.linked_user_id
+LEFT JOIN speaker_embedding se ON se.speaker_id = sp.id
+LEFT JOIN segment s ON s.speaker_id = sp.id AND NOT s.ignored
+WHERE sp.owner_id = $1
+GROUP BY sp.id, c.name, u.email
+ORDER BY (sp.name IS NULL) ASC, sp.name ASC NULLS LAST, sp.created_at ASC
+`
+
+type GetSpeakersRow struct {
+	ID                uuid.UUID
+	Name              pgtype.Text
+	Email             pgtype.Text
+	CompanyID         *uuid.UUID
+	CompanyName       pgtype.Text
+	LinkedUserID      *uuid.UUID
+	UserEmail         pgtype.Text
+	EmbeddingCount    int32
+	SegmentCount      int32
+	TotalSpeakingTime float64
+	ConversationCount int32
+	CreatedAt         time.Time
+}
+
+func (q *Queries) GetSpeakers(ctx context.Context, ownerID *uuid.UUID) ([]GetSpeakersRow, error) {
+	rows, err := q.db.Query(ctx, getSpeakers, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSpeakersRow
+	for rows.Next() {
+		var i GetSpeakersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Email,
+			&i.CompanyID,
+			&i.CompanyName,
+			&i.LinkedUserID,
+			&i.UserEmail,
+			&i.EmbeddingCount,
+			&i.SegmentCount,
+			&i.TotalSpeakingTime,
+			&i.ConversationCount,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertAnonymousSpeaker = `-- name: InsertAnonymousSpeaker :one
+INSERT INTO speaker (
+  name,
+  owner_id
+) VALUES ( NULL, $1 ) returning id
+`
+
+func (q *Queries) InsertAnonymousSpeaker(ctx context.Context, ownerID *uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertAnonymousSpeaker, ownerID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertSpeaker = `-- name: InsertSpeaker :one
+INSERT INTO speaker (
+  name,
+  email,
+  company_id,
+  owner_id
+) VALUES ($1, $2, $3, $4) returning id
+`
+
+type InsertSpeakerParams struct {
+	Name      pgtype.Text
+	Email     pgtype.Text
+	CompanyID *uuid.UUID
+	OwnerID   *uuid.UUID
+}
+
+func (q *Queries) InsertSpeaker(ctx context.Context, arg InsertSpeakerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertSpeaker,
+		arg.Name,
+		arg.Email,
+		arg.CompanyID,
+		arg.OwnerID,
+	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -89,6 +311,22 @@ func (q *Queries) InsertSpeakerEmbedding(ctx context.Context, arg InsertSpeakerE
 	var i InsertSpeakerEmbeddingRow
 	err := row.Scan(&i.ID, &i.SpeakerID, &i.CreatedAt)
 	return i, err
+}
+
+const moveEmbeddingsToSpeaker = `-- name: MoveEmbeddingsToSpeaker :exec
+UPDATE speaker_embedding
+  SET speaker_id = $2
+  WHERE speaker_id = $1
+`
+
+type MoveEmbeddingsToSpeakerParams struct {
+	SpeakerID   uuid.UUID
+	SpeakerID_2 uuid.UUID
+}
+
+func (q *Queries) MoveEmbeddingsToSpeaker(ctx context.Context, arg MoveEmbeddingsToSpeakerParams) error {
+	_, err := q.db.Exec(ctx, moveEmbeddingsToSpeaker, arg.SpeakerID, arg.SpeakerID_2)
+	return err
 }
 
 const pruneMostRedundantSpeakerEmbedding = `-- name: PruneMostRedundantSpeakerEmbedding :exec
@@ -125,5 +363,55 @@ WHERE id = (
 
 func (q *Queries) PruneMostRedundantSpeakerEmbedding(ctx context.Context, speakerID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, pruneMostRedundantSpeakerEmbedding, speakerID)
+	return err
+}
+
+const updateSpeaker = `-- name: UpdateSpeaker :exec
+UPDATE speaker
+  SET name = CASE WHEN $2::text IS NULL THEN name ELSE $2 END,
+      email = COALESCE($3::varchar, email),
+      company_id = CASE WHEN $4::bool THEN NULL ELSE COALESCE($5::uuid, company_id) END,
+      linked_user_id = CASE WHEN $6::bool THEN NULL ELSE COALESCE($7::uuid, linked_user_id) END,
+      updated_at = now()
+  WHERE id = $1
+`
+
+type UpdateSpeakerParams struct {
+	ID           uuid.UUID
+	Name         pgtype.Text
+	Email        pgtype.Text
+	ClearCompany pgtype.Bool
+	CompanyID    *uuid.UUID
+	ClearUser    pgtype.Bool
+	LinkUserID   *uuid.UUID
+}
+
+func (q *Queries) UpdateSpeaker(ctx context.Context, arg UpdateSpeakerParams) error {
+	_, err := q.db.Exec(ctx, updateSpeaker,
+		arg.ID,
+		arg.Name,
+		arg.Email,
+		arg.ClearCompany,
+		arg.CompanyID,
+		arg.ClearUser,
+		arg.LinkUserID,
+	)
+	return err
+}
+
+const updateSpeakerName = `-- name: UpdateSpeakerName :exec
+UPDATE speaker
+  SET name = $2,
+      updated_at = now()
+  WHERE id = $1
+`
+
+type UpdateSpeakerNameParams struct {
+	ID   uuid.UUID
+	Name pgtype.Text
+}
+
+func (q *Queries) UpdateSpeakerName(ctx context.Context, arg UpdateSpeakerNameParams) error {
+	_, err := q.db.Exec(ctx, updateSpeakerName, arg.ID, arg.Name)
 	return err
 }

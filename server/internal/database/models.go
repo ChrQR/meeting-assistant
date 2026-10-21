@@ -12,11 +12,29 @@ import (
 	"github.com/pgvector/pgvector-go"
 )
 
+type Account struct {
+	ID                uuid.UUID
+	UserID            uuid.UUID
+	Provider          string
+	ProviderAccountID string
+	CreatedAt         time.Time
+}
+
+type AppUser struct {
+	ID        uuid.UUID
+	Email     string
+	Name      pgtype.Text
+	AvatarUrl pgtype.Text
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type Company struct {
 	ID        uuid.UUID
 	Name      pgtype.Text
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	UserID    *uuid.UUID
 }
 
 type Conversation struct {
@@ -30,6 +48,7 @@ type Conversation struct {
 	RecordingID        uuid.UUID
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	MeetingAt          *time.Time
 }
 
 type Recording struct {
@@ -38,6 +57,7 @@ type Recording struct {
 	Extension string
 	Filename  string
 	Status    string
+	UserID    *uuid.UUID
 }
 
 type Segment struct {
@@ -50,15 +70,18 @@ type Segment struct {
 	SpeakerID      uuid.UUID
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	Ignored        bool
 }
 
 type Speaker struct {
-	ID        uuid.UUID
-	Name      pgtype.Text
-	Email     pgtype.Text
-	CompanyID *uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID           uuid.UUID
+	Name         pgtype.Text
+	Email        pgtype.Text
+	CompanyID    *uuid.UUID
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	OwnerID      *uuid.UUID
+	LinkedUserID *uuid.UUID
 }
 
 type SpeakerEmbedding struct {

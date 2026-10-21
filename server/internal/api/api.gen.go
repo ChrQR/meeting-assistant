@@ -4,39 +4,344 @@
 package api
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
-	"mime/multipart"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/nullable"
+	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// AssignSpeakerBody defines model for AssignSpeakerBody.
+type AssignSpeakerBody struct {
+	CompanyId       nullable.Nullable[openapi_types.UUID] `json:"company_id,omitempty"`
+	Email           nullable.Nullable[string]             `json:"email,omitempty"`
+	Name            nullable.Nullable[string]             `json:"name,omitempty"`
+	TargetSpeakerId nullable.Nullable[openapi_types.UUID] `json:"target_speaker_id,omitempty"`
+}
+
+// AuthProviders defines model for AuthProviders.
+type AuthProviders struct {
+	Providers []string `json:"providers"`
+}
+
+// Company defines model for Company.
+type Company struct {
+	CreatedAt    time.Time          `json:"created_at"`
+	Id           openapi_types.UUID `json:"id"`
+	Name         string             `json:"name"`
+	SpeakerCount int                `json:"speaker_count"`
+}
+
+// CompanyBody defines model for CompanyBody.
+type CompanyBody struct {
+	Name string `json:"name"`
+}
+
+// Conversation defines model for Conversation.
+type Conversation struct {
+	Cost      float64            `json:"cost"`
+	CreatedAt time.Time          `json:"created_at"`
+	Id        openapi_types.UUID `json:"id"`
+	Language  string             `json:"language"`
+	Length    float64            `json:"length"`
+
+	// MeetingAt When the meeting took place. Null when not supplied on upload.
+	MeetingAt           nullable.Nullable[time.Time] `json:"meeting_at"`
+	RecordingId         openapi_types.UUID           `json:"recording_id"`
+	RecordingStatus     string                       `json:"recording_status"`
+	Segments            []ConversationSegment        `json:"segments,omitempty"`
+	SpeakerCount        int                          `json:"speaker_count"`
+	Summary             nullable.Nullable[string]    `json:"summary"`
+	Title               string                       `json:"title"`
+	UnknownSpeakerCount int                          `json:"unknown_speaker_count"`
+}
+
+// ConversationSegment defines model for ConversationSegment.
+type ConversationSegment struct {
+	Duration float64            `json:"duration"`
+	EndTime  float64            `json:"end_time"`
+	Id       openapi_types.UUID `json:"id"`
+
+	// Ignored Whether the user dismissed this segment as unidentified noise.
+	Ignored     bool                      `json:"ignored"`
+	SpeakerId   openapi_types.UUID        `json:"speaker_id"`
+	SpeakerName nullable.Nullable[string] `json:"speaker_name"`
+	StartTime   float64                   `json:"start_time"`
+	Text        string                    `json:"text"`
+}
+
+// ConversationSummary defines model for ConversationSummary.
+type ConversationSummary struct {
+	Cost      float64            `json:"cost"`
+	CreatedAt time.Time          `json:"created_at"`
+	Id        openapi_types.UUID `json:"id"`
+	Language  string             `json:"language"`
+	Length    float64            `json:"length"`
+
+	// MeetingAt When the meeting took place. Null when not supplied on upload.
+	MeetingAt           nullable.Nullable[time.Time] `json:"meeting_at"`
+	RecordingId         openapi_types.UUID           `json:"recording_id"`
+	RecordingStatus     string                       `json:"recording_status"`
+	SpeakerCount        int                          `json:"speaker_count"`
+	Summary             nullable.Nullable[string]    `json:"summary"`
+	Title               string                       `json:"title"`
+	UnknownSpeakerCount int                          `json:"unknown_speaker_count"`
+}
+
+// CreateSpeakerBody defines model for CreateSpeakerBody.
+type CreateSpeakerBody struct {
+	CompanyId nullable.Nullable[openapi_types.UUID] `json:"company_id,omitempty"`
+	Email     nullable.Nullable[string]             `json:"email,omitempty"`
+	Name      string                                `json:"name"`
+}
+
+// Recording defines model for Recording.
+type Recording struct {
+	Extension string             `json:"extension"`
+	Filename  string             `json:"filename"`
+	Id        openapi_types.UUID `json:"id"`
+	Status    string             `json:"status"`
+}
+
+// SetSegmentIgnoredBody defines model for SetSegmentIgnoredBody.
+type SetSegmentIgnoredBody struct {
+	Ignored bool `json:"ignored"`
+}
+
+// Speaker defines model for Speaker.
+type Speaker struct {
+	CompanyId         nullable.Nullable[openapi_types.UUID] `json:"company_id"`
+	CompanyName       nullable.Nullable[string]             `json:"company_name"`
+	ConversationCount int                                   `json:"conversation_count"`
+	CreatedAt         time.Time                             `json:"created_at"`
+	Email             nullable.Nullable[string]             `json:"email"`
+	EmbeddingCount    int                                   `json:"embedding_count"`
+	Id                openapi_types.UUID                    `json:"id"`
+	Name              nullable.Nullable[string]             `json:"name"`
+	SegmentCount      int                                   `json:"segment_count"`
+
+	// TotalSpeakingTime Total duration (seconds) of all segments belonging to this speaker.
+	TotalSpeakingTime float64 `json:"total_speaking_time"`
+
+	// UserEmail Email of the linked user, for display.
+	UserEmail nullable.Nullable[string] `json:"user_email"`
+
+	// UserId The application user this speaker represents, if linked.
+	UserId nullable.Nullable[openapi_types.UUID] `json:"user_id"`
+}
+
+// SpeakerDetail defines model for SpeakerDetail.
+type SpeakerDetail struct {
+	CompanyId         nullable.Nullable[openapi_types.UUID] `json:"company_id"`
+	CompanyName       nullable.Nullable[string]             `json:"company_name"`
+	ConversationCount int                                   `json:"conversation_count"`
+	CreatedAt         time.Time                             `json:"created_at"`
+	Email             nullable.Nullable[string]             `json:"email"`
+	EmbeddingCount    int                                   `json:"embedding_count"`
+	Embeddings        []SpeakerEmbedding                    `json:"embeddings,omitempty"`
+	Id                openapi_types.UUID                    `json:"id"`
+	Name              nullable.Nullable[string]             `json:"name"`
+	SegmentCount      int                                   `json:"segment_count"`
+	Segments          []SpeakerSegment                      `json:"segments,omitempty"`
+
+	// TotalSpeakingTime Total duration (seconds) of all segments belonging to this speaker.
+	TotalSpeakingTime float64 `json:"total_speaking_time"`
+
+	// UserEmail Email of the linked user, for display.
+	UserEmail nullable.Nullable[string] `json:"user_email"`
+
+	// UserId The application user this speaker represents, if linked.
+	UserId nullable.Nullable[openapi_types.UUID] `json:"user_id"`
+}
+
+// SpeakerEmbedding defines model for SpeakerEmbedding.
+type SpeakerEmbedding struct {
+	CreatedAt time.Time          `json:"created_at"`
+	Id        openapi_types.UUID `json:"id"`
+}
+
+// SpeakerSegment defines model for SpeakerSegment.
+type SpeakerSegment struct {
+	ConversationId    openapi_types.UUID `json:"conversation_id"`
+	ConversationTitle string             `json:"conversation_title"`
+	EndTime           float64            `json:"end_time"`
+	Id                openapi_types.UUID `json:"id"`
+	StartTime         float64            `json:"start_time"`
+	Text              string             `json:"text"`
+}
+
+// UpdateSpeakerBody defines model for UpdateSpeakerBody.
+type UpdateSpeakerBody struct {
+	// ClearCompany Set to true to detach the speaker from their company.
+	ClearCompany bool `json:"clear_company,omitempty"`
+
+	// ClearUser Set to true to detach the speaker from its user.
+	ClearUser bool                                  `json:"clear_user,omitempty"`
+	CompanyId nullable.Nullable[openapi_types.UUID] `json:"company_id,omitempty"`
+	Email     nullable.Nullable[string]             `json:"email,omitempty"`
+	Name      nullable.Nullable[string]             `json:"name,omitempty"`
+
+	// UserId Link this speaker to an application user.
+	UserId nullable.Nullable[openapi_types.UUID] `json:"user_id,omitempty"`
+}
+
+// User defines model for User.
+type User struct {
+	AvatarUrl nullable.Nullable[string] `json:"avatar_url"`
+	CreatedAt time.Time                 `json:"created_at"`
+	Email     string                    `json:"email"`
+	Id        openapi_types.UUID        `json:"id"`
+	Name      nullable.Nullable[string] `json:"name"`
+}
+
 // UploadRecordingMultipartBody defines parameters for UploadRecording.
 type UploadRecordingMultipartBody struct {
-	File  openapi_types.File `json:"file"`
-	Title string             `json:"title"`
+	File openapi_types.File `json:"file"`
+
+	// MeetingAt When the meeting took place. Accepts a date (YYYY-MM-DD) or a
+	// full RFC 3339 timestamp. Defaults to the upload time.
+	MeetingAt time.Time `json:"meeting_at,omitempty"`
+	Title     string    `json:"title"`
 }
+
+// CreateCompanyJSONRequestBody defines body for CreateCompany for application/json ContentType.
+type CreateCompanyJSONRequestBody = CompanyBody
+
+// UpdateCompanyJSONRequestBody defines body for UpdateCompany for application/json ContentType.
+type UpdateCompanyJSONRequestBody = CompanyBody
+
+// SetSegmentIgnoredJSONRequestBody defines body for SetSegmentIgnored for application/json ContentType.
+type SetSegmentIgnoredJSONRequestBody = SetSegmentIgnoredBody
 
 // UploadRecordingMultipartRequestBody defines body for UploadRecording for multipart/form-data ContentType.
 type UploadRecordingMultipartRequestBody UploadRecordingMultipartBody
 
+// CreateSpeakerJSONRequestBody defines body for CreateSpeaker for application/json ContentType.
+type CreateSpeakerJSONRequestBody = CreateSpeakerBody
+
+// UpdateSpeakerJSONRequestBody defines body for UpdateSpeaker for application/json ContentType.
+type UpdateSpeakerJSONRequestBody = UpdateSpeakerBody
+
+// AssignSpeakerJSONRequestBody defines body for AssignSpeaker for application/json ContentType.
+type AssignSpeakerJSONRequestBody = AssignSpeakerBody
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+
+	// (POST /auth/logout)
+	Logout(w http.ResponseWriter, r *http.Request)
+
+	// (GET /auth/me)
+	GetMe(w http.ResponseWriter, r *http.Request)
+
+	// (GET /auth/providers)
+	GetAuthProviders(w http.ResponseWriter, r *http.Request)
+
+	// (GET /companies)
+	GetCompanies(w http.ResponseWriter, r *http.Request)
+
+	// (POST /companies)
+	CreateCompany(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /companies/{id})
+	DeleteCompany(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PATCH /companies/{id})
+	UpdateCompany(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /conversations)
+	GetConversations(w http.ResponseWriter, r *http.Request)
+
+	// (GET /conversations/{id})
+	GetConversation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PATCH /conversations/{id}/segments/{segmentId}/ignore)
+	SetSegmentIgnored(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, segmentId openapi_types.UUID)
 
 	// (GET /recordings)
 	GetRecordings(w http.ResponseWriter, r *http.Request)
 
 	// (POST /recordings)
 	UploadRecording(w http.ResponseWriter, r *http.Request)
+
+	// (GET /recordings/{id}/audio)
+	GetRecordingAudio(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /speakers)
+	GetSpeakers(w http.ResponseWriter, r *http.Request)
+
+	// (POST /speakers)
+	CreateSpeaker(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /speakers/{id})
+	DeleteSpeaker(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /speakers/{id})
+	GetSpeaker(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PATCH /speakers/{id})
+	UpdateSpeaker(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /speakers/{id}/assign)
+	AssignSpeaker(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// (POST /auth/logout)
+func (_ Unimplemented) Logout(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /auth/me)
+func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /auth/providers)
+func (_ Unimplemented) GetAuthProviders(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /companies)
+func (_ Unimplemented) GetCompanies(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /companies)
+func (_ Unimplemented) CreateCompany(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /companies/{id})
+func (_ Unimplemented) DeleteCompany(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /companies/{id})
+func (_ Unimplemented) UpdateCompany(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /conversations)
+func (_ Unimplemented) GetConversations(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /conversations/{id})
+func (_ Unimplemented) GetConversation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /conversations/{id}/segments/{segmentId}/ignore)
+func (_ Unimplemented) SetSegmentIgnored(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, segmentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // (GET /recordings)
 func (_ Unimplemented) GetRecordings(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +353,41 @@ func (_ Unimplemented) UploadRecording(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /recordings/{id}/audio)
+func (_ Unimplemented) GetRecordingAudio(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /speakers)
+func (_ Unimplemented) GetSpeakers(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /speakers)
+func (_ Unimplemented) CreateSpeaker(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /speakers/{id})
+func (_ Unimplemented) DeleteSpeaker(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /speakers/{id})
+func (_ Unimplemented) GetSpeaker(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /speakers/{id})
+func (_ Unimplemented) UpdateSpeaker(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /speakers/{id}/assign)
+func (_ Unimplemented) AssignSpeaker(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
 	Handler            ServerInterface
@@ -56,6 +396,203 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// Logout operation middleware
+func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Logout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMe operation middleware
+func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAuthProviders operation middleware
+func (siw *ServerInterfaceWrapper) GetAuthProviders(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAuthProviders(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCompanies operation middleware
+func (siw *ServerInterfaceWrapper) GetCompanies(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCompanies(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCompany operation middleware
+func (siw *ServerInterfaceWrapper) CreateCompany(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCompany(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCompany operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCompany(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCompany(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCompany operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCompany(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCompany(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetConversations operation middleware
+func (siw *ServerInterfaceWrapper) GetConversations(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConversations(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetConversation operation middleware
+func (siw *ServerInterfaceWrapper) GetConversation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConversation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetSegmentIgnored operation middleware
+func (siw *ServerInterfaceWrapper) SetSegmentIgnored(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "segmentId" -------------
+	var segmentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "segmentId", chi.URLParam(r, "segmentId"), &segmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "segmentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetSegmentIgnored(w, r, id, segmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetRecordings operation middleware
 func (siw *ServerInterfaceWrapper) GetRecordings(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +613,164 @@ func (siw *ServerInterfaceWrapper) UploadRecording(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UploadRecording(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRecordingAudio operation middleware
+func (siw *ServerInterfaceWrapper) GetRecordingAudio(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRecordingAudio(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSpeakers operation middleware
+func (siw *ServerInterfaceWrapper) GetSpeakers(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSpeakers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSpeaker operation middleware
+func (siw *ServerInterfaceWrapper) CreateSpeaker(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSpeaker(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteSpeaker operation middleware
+func (siw *ServerInterfaceWrapper) DeleteSpeaker(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteSpeaker(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSpeaker operation middleware
+func (siw *ServerInterfaceWrapper) GetSpeaker(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSpeaker(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSpeaker operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSpeaker(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSpeaker(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AssignSpeaker operation middleware
+func (siw *ServerInterfaceWrapper) AssignSpeaker(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AssignSpeaker(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -199,189 +894,62 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/auth/providers", wrapper.GetAuthProviders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/auth/me", wrapper.GetMe)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/logout", wrapper.Logout)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/recordings", wrapper.GetRecordings)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/recordings", wrapper.UploadRecording)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/recordings/{id}/audio", wrapper.GetRecordingAudio)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/conversations", wrapper.GetConversations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/conversations/{id}", wrapper.GetConversation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/conversations/{id}/segments/{segmentId}/ignore", wrapper.SetSegmentIgnored)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/speakers", wrapper.GetSpeakers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/speakers", wrapper.CreateSpeaker)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/speakers/{id}", wrapper.DeleteSpeaker)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/speakers/{id}", wrapper.GetSpeaker)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/speakers/{id}", wrapper.UpdateSpeaker)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/speakers/{id}/assign", wrapper.AssignSpeaker)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/companies", wrapper.GetCompanies)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/companies", wrapper.CreateCompany)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/companies/{id}", wrapper.DeleteCompany)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/companies/{id}", wrapper.UpdateCompany)
+	})
 
 	return r
-}
-
-type GetRecordingsRequestObject struct {
-}
-
-type GetRecordingsResponseObject interface {
-	VisitGetRecordingsResponse(w http.ResponseWriter) error
-}
-
-type GetRecordings200JSONResponse []struct {
-	Extension *string             `json:"extension,omitempty"`
-	Filename  *string             `json:"filename,omitempty"`
-	Id        *openapi_types.UUID `json:"id,omitempty"`
-	Status    *string             `json:"status,omitempty"`
-}
-
-func (response GetRecordings200JSONResponse) VisitGetRecordingsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetRecordings500Response struct {
-}
-
-func (response GetRecordings500Response) VisitGetRecordingsResponse(w http.ResponseWriter) error {
-	w.WriteHeader(500)
-	return nil
-}
-
-type UploadRecordingRequestObject struct {
-	Body *multipart.Reader
-}
-
-type UploadRecordingResponseObject interface {
-	VisitUploadRecordingResponse(w http.ResponseWriter) error
-}
-
-type UploadRecording201Response struct {
-}
-
-func (response UploadRecording201Response) VisitUploadRecordingResponse(w http.ResponseWriter) error {
-	w.WriteHeader(201)
-	return nil
-}
-
-type UploadRecording400Response struct {
-}
-
-func (response UploadRecording400Response) VisitUploadRecordingResponse(w http.ResponseWriter) error {
-	w.WriteHeader(400)
-	return nil
-}
-
-type UploadRecording422Response struct {
-}
-
-func (response UploadRecording422Response) VisitUploadRecordingResponse(w http.ResponseWriter) error {
-	w.WriteHeader(422)
-	return nil
-}
-
-type UploadRecording500Response struct {
-}
-
-func (response UploadRecording500Response) VisitUploadRecordingResponse(w http.ResponseWriter) error {
-	w.WriteHeader(500)
-	return nil
-}
-
-// StrictServerInterface represents all server handlers.
-type StrictServerInterface interface {
-
-	// (GET /recordings)
-	GetRecordings(ctx context.Context, request GetRecordingsRequestObject) (GetRecordingsResponseObject, error)
-
-	// (POST /recordings)
-	UploadRecording(ctx context.Context, request UploadRecordingRequestObject) (UploadRecordingResponseObject, error)
-}
-
-type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
-
-type StrictHTTPServerOptions struct {
-	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
-	ResponseErrorHandlerFunc func(w http.ResponseWriter, r *http.Request, err error)
-}
-
-func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
-	return &strictHandler{ssi: ssi, middlewares: middlewares, options: StrictHTTPServerOptions{
-		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		},
-		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		},
-	}}
-}
-
-func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
-	if options.RequestErrorHandlerFunc == nil {
-		options.RequestErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-	}
-	if options.ResponseErrorHandlerFunc == nil {
-		options.ResponseErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}
-	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
-}
-
-type strictHandler struct {
-	ssi         StrictServerInterface
-	middlewares []StrictMiddlewareFunc
-	options     StrictHTTPServerOptions
-}
-
-// GetRecordings operation middleware
-func (sh *strictHandler) GetRecordings(w http.ResponseWriter, r *http.Request) {
-	var request GetRecordingsRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetRecordings(ctx, request.(GetRecordingsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetRecordings")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetRecordingsResponseObject); ok {
-		if err := validResponse.VisitGetRecordingsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UploadRecording operation middleware
-func (sh *strictHandler) UploadRecording(w http.ResponseWriter, r *http.Request) {
-	var request UploadRecordingRequestObject
-
-	if reader, err := r.MultipartReader(); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode multipart body: %w", err))
-		return
-	} else {
-		request.Body = reader
-	}
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UploadRecording(ctx, request.(UploadRecordingRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UploadRecording")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UploadRecordingResponseObject); ok {
-		if err := validResponse.VisitUploadRecordingResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
 }

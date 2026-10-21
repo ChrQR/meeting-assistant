@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
+	"time"
 
 	"github.com/ChrQR/meeting-assistant/server/internal/types"
 )
+
+const summaryTimeout = 10 * time.Minute
 
 type summaryClient struct {
 	openrouterAPIKey string
@@ -64,7 +66,7 @@ type summaryResponseChoiceMessage struct {
 func NewSummaryClient(openrouterAPIKey string) SummaryClient {
 	return &summaryClient{
 		openrouterAPIKey: openrouterAPIKey,
-		client:           http.Client{},
+		client:           http.Client{Timeout: summaryTimeout},
 	}
 }
 
@@ -99,33 +101,35 @@ func (c *summaryClient) GetSummary(ctx context.Context, transcription types.Tran
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(reqBody); err != nil {
-		return "", err
+		return "", fmt.Errorf("encode summary request: %w", err)
 	}
-	req, err := http.NewRequest("POST", "https://openrouter.ai/api/v1/chat/completions", &buf)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://openrouter.ai/api/v1/chat/completions", &buf)
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("create summary request: %w", err)
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.openrouterAPIKey))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("send summary request: %w", err)
 	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("error closing response body: %v", err)
-		}
-	}()
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read summary response: %w", err)
 	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("openrouter returned %s: %s", resp.Status, truncate(body, 500))
+	}
+
 	var respBody summaryResponse
 	if err := json.Unmarshal(body, &respBody); err != nil {
-		return "", err
+		return "", fmt.Errorf("decode summary response: %w", err)
+	}
+	if len(respBody.Choices) == 0 {
+		return "", fmt.Errorf("summary response contained no choices")
 	}
 	return respBody.Choices[0].Message.Content, nil
 }

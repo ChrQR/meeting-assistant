@@ -6,9 +6,90 @@
 package database
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const countSegmentsBySpeaker = `-- name: CountSegmentsBySpeaker :one
+SELECT COUNT(*)
+FROM segment s
+JOIN speaker sp ON sp.id = s.speaker_id
+WHERE s.speaker_id = $1
+  AND sp.owner_id = $2
+  AND NOT s.ignored
+`
+
+type CountSegmentsBySpeakerParams struct {
+	SpeakerID uuid.UUID
+	OwnerID   *uuid.UUID
+}
+
+func (q *Queries) CountSegmentsBySpeaker(ctx context.Context, arg CountSegmentsBySpeakerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSegmentsBySpeaker, arg.SpeakerID, arg.OwnerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getSegmentsBySpeaker = `-- name: GetSegmentsBySpeaker :many
+SELECT
+  s.id,
+  s.text,
+  s.start_time,
+  s.end_time,
+  s.conversation_id,
+  c.title AS conversation_title
+FROM segment s
+JOIN conversation c ON c.id = s.conversation_id
+JOIN speaker sp ON sp.id = s.speaker_id
+WHERE s.speaker_id = $1
+  AND sp.owner_id = $2
+  AND NOT s.ignored
+ORDER BY COALESCE(c.meeting_at, c.created_at) DESC, s.start_time ASC
+`
+
+type GetSegmentsBySpeakerParams struct {
+	SpeakerID uuid.UUID
+	OwnerID   *uuid.UUID
+}
+
+type GetSegmentsBySpeakerRow struct {
+	ID                uuid.UUID
+	Text              pgtype.Text
+	StartTime         pgtype.Float8
+	EndTime           pgtype.Float8
+	ConversationID    uuid.UUID
+	ConversationTitle string
+}
+
+func (q *Queries) GetSegmentsBySpeaker(ctx context.Context, arg GetSegmentsBySpeakerParams) ([]GetSegmentsBySpeakerRow, error) {
+	rows, err := q.db.Query(ctx, getSegmentsBySpeaker, arg.SpeakerID, arg.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSegmentsBySpeakerRow
+	for rows.Next() {
+		var i GetSegmentsBySpeakerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Text,
+			&i.StartTime,
+			&i.EndTime,
+			&i.ConversationID,
+			&i.ConversationTitle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 type InsertSegmentsParams struct {
 	Text           pgtype.Text
@@ -17,4 +98,22 @@ type InsertSegmentsParams struct {
 	Duration       pgtype.Float8
 	ConversationID uuid.UUID
 	SpeakerID      uuid.UUID
+}
+
+const moveSegmentsToSpeaker = `-- name: MoveSegmentsToSpeaker :exec
+UPDATE segment
+  SET speaker_id = $2
+  WHERE speaker_id = $1
+`
+
+type MoveSegmentsToSpeakerParams struct {
+	SpeakerID   uuid.UUID
+	SpeakerID_2 uuid.UUID
+}
+
+// Ignored segments move with the speaker so the source speaker can be deleted.
+// They stay ignored, so they are never surfaced as the target's speech.
+func (q *Queries) MoveSegmentsToSpeaker(ctx context.Context, arg MoveSegmentsToSpeakerParams) error {
+	_, err := q.db.Exec(ctx, moveSegmentsToSpeaker, arg.SpeakerID, arg.SpeakerID_2)
+	return err
 }

@@ -4,11 +4,10 @@ output: internal/api/api.gen.go
 generate:
   models: true
   chi-server: true
-  strict-server: true
 
 output-options:
   name-normalizer: ToCamelCase
-  prefer-skip-optional-pointer: false
+  prefer-skip-optional-pointer: true
   prefer-skip-optional-pointer-with-omitzero: false
   prefer-skip-optional-pointer-on-container-types: false
   resolve-type-name-collisions: false

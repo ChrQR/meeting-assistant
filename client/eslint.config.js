@@ -37,5 +37,9 @@ export default defineConfig(
 		// Override or add rule settings here, such as:
 		// 'svelte/button-has-type': 'error'
 		rules: {}
+	},
+	{
+		// Vendored shadcn-svelte components are treated as generated code.
+		ignores: ['src/lib/components/ui/**']
 	}
 );

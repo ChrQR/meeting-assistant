@@ -17,15 +17,170 @@ import type {
 } from '@tanstack/svelte-query';
 
 import { customFetch } from './custom-fetch.ts';
-export type GetRecordings200Item = {
-  id?: string;
-  filename?: string;
-  extension?: string;
-  status?: string;
+export interface AuthProviders {
+  providers: string[];
+}
+
+export interface User {
+  id: string;
+  email: string;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  avatar_url: string | null;
+  created_at: string;
+}
+
+export interface Recording {
+  id: string;
+  filename: string;
+  extension: string;
+  status: string;
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  /** @nullable */
+  summary: string | null;
+  length: number;
+  cost: number;
+  language: string;
+  created_at: string;
+  /**
+     * When the meeting took place. Null when not supplied on upload.
+     * @nullable
+     */
+  meeting_at: string | null;
+  recording_id: string;
+  recording_status: string;
+  speaker_count: number;
+  unknown_speaker_count: number;
+}
+
+export interface ConversationSegment {
+  id: string;
+  text: string;
+  start_time: number;
+  end_time: number;
+  duration: number;
+  speaker_id: string;
+  /** @nullable */
+  speaker_name: string | null;
+  /** Whether the user dismissed this segment as unidentified noise. */
+  ignored: boolean;
+}
+
+export type Conversation = ConversationSummary & {
+  segments?: ConversationSegment[];
 };
+
+export interface Speaker {
+  id: string;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  company_id: string | null;
+  /** @nullable */
+  company_name: string | null;
+  /**
+     * The application user this speaker represents, if linked.
+     * @nullable
+     */
+  user_id: string | null;
+  /**
+     * Email of the linked user, for display.
+     * @nullable
+     */
+  user_email: string | null;
+  embedding_count: number;
+  segment_count: number;
+  /** Total duration (seconds) of all segments belonging to this speaker. */
+  total_speaking_time: number;
+  conversation_count: number;
+  created_at: string;
+}
+
+export interface SpeakerEmbedding {
+  id: string;
+  created_at: string;
+}
+
+export interface SpeakerSegment {
+  id: string;
+  text: string;
+  start_time: number;
+  end_time: number;
+  conversation_id: string;
+  conversation_title: string;
+}
+
+export type SpeakerDetail = Speaker & {
+  embeddings?: SpeakerEmbedding[];
+  segments?: SpeakerSegment[];
+};
+
+export interface CreateSpeakerBody {
+  name: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  company_id?: string | null;
+}
+
+export interface UpdateSpeakerBody {
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  company_id?: string | null;
+  /** Set to true to detach the speaker from their company. */
+  clear_company?: boolean;
+  /**
+     * Link this speaker to an application user.
+     * @nullable
+     */
+  user_id?: string | null;
+  /** Set to true to detach the speaker from its user. */
+  clear_user?: boolean;
+}
+
+export interface AssignSpeakerBody {
+  /** @nullable */
+  target_speaker_id?: string | null;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  company_id?: string | null;
+}
+
+export interface SetSegmentIgnoredBody {
+  ignored: boolean;
+}
+
+export interface CompanyBody {
+  name: string;
+}
+
+export interface Company {
+  id: string;
+  name: string;
+  speaker_count: number;
+  created_at: string;
+}
 
 export type UploadRecordingBody = {
   title: string;
+  /**
+     * When the meeting took place. Accepts a date (YYYY-MM-DD) or a
+     * full RFC 3339 timestamp. Defaults to the upload time.
+     */
+  meeting_at?: string;
   file: Blob | File;
 };
 
@@ -33,8 +188,273 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
 
+export type getAuthProvidersResponse200 = {
+  data: AuthProviders
+  status: 200
+}
+
+export type getAuthProvidersResponseSuccess = (getAuthProvidersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getAuthProvidersResponse = (getAuthProvidersResponseSuccess)
+
+export const getGetAuthProvidersUrl = () => {
+
+
+
+
+  return `/auth/providers`
+}
+
+/**
+ * List the configured single sign-on providers.
+ */
+export const getAuthProviders = async ( options?: Parameters<typeof customFetch>[1]): Promise<getAuthProvidersResponse> => {
+
+  return customFetch<getAuthProvidersResponse>(getGetAuthProvidersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAuthProvidersQueryKey = () => {
+    return [
+    `/auth/providers`
+    ] as const;
+    }
+
+
+export const getGetAuthProvidersQueryOptions = <TData = Awaited<ReturnType<typeof getAuthProviders>>, TError = unknown>( options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getAuthProviders>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAuthProvidersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuthProviders>>> = ({ signal }) => getAuthProviders({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof getAuthProviders>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAuthProvidersQueryResult = NonNullable<Awaited<ReturnType<typeof getAuthProviders>>>
+export type GetAuthProvidersQueryError = unknown
+
+
+
+export function createGetAuthProviders<TData = Awaited<ReturnType<typeof getAuthProviders>>, TError = unknown>(
+  options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getAuthProviders>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getGetAuthProvidersQueryOptions(options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type getMeResponse200 = {
+  data: User
+  status: 200
+}
+
+export type getMeResponse401 = {
+  data: void
+  status: 401
+}
+
+export type getMeResponseSuccess = (getMeResponse200) & {
+  headers: Headers;
+};
+export type getMeResponseError = (getMeResponse401) & {
+  headers: Headers;
+};
+
+export type getMeResponse = (getMeResponseSuccess | getMeResponseError)
+
+export const getGetMeUrl = () => {
+
+
+
+
+  return `/auth/me`
+}
+
+/**
+ * Return the authenticated user.
+ */
+export const getMe = async ( options?: Parameters<typeof customFetch>[1]): Promise<getMeResponse> => {
+
+  return customFetch<getMeResponse>(getGetMeUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMeQueryKey = () => {
+    return [
+    `/auth/me`
+    ] as const;
+    }
+
+
+export const getGetMeQueryOptions = <TData = Awaited<ReturnType<typeof getMe>>, TError = void>( options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMeQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMe>>> = ({ signal }) => getMe({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetMeQueryResult = NonNullable<Awaited<ReturnType<typeof getMe>>>
+export type GetMeQueryError = void
+
+
+
+export function createGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = void>(
+  options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getGetMeQueryOptions(options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type logoutResponse204 = {
+  data: void
+  status: 204
+}
+
+export type logoutResponseSuccess = (logoutResponse204) & {
+  headers: Headers;
+};
+;
+
+export type logoutResponse = (logoutResponseSuccess)
+
+export const getLogoutUrl = () => {
+
+
+
+
+  return `/auth/logout`
+}
+
+/**
+ * Clear the session cookie.
+ */
+export const logout = async ( options?: Parameters<typeof customFetch>[1]): Promise<logoutResponse> => {
+
+  return customFetch<logoutResponse>(getLogoutUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getLogoutQueryKey = () => {
+    return [
+    'POST', `/auth/logout`
+    ] as const;
+    }
+
+
+export const getLogoutQueryOptions = <TData = Awaited<ReturnType<typeof logout>>, TError = unknown>( options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof logout>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getLogoutQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof logout>>> = ({ signal }) => logout({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof logout>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type LogoutQueryResult = NonNullable<Awaited<ReturnType<typeof logout>>>
+export type LogoutQueryError = unknown
+
+
+
+export function createLogout<TData = Awaited<ReturnType<typeof logout>>, TError = unknown>(
+  options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof logout>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getLogoutQueryOptions(options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
 export type getRecordingsResponse200 = {
-  data: GetRecordings200Item[]
+  data: Recording[]
   status: 200
 }
 
@@ -126,9 +546,9 @@ export function createGetRecordings<TData = Awaited<ReturnType<typeof getRecordi
 
 
 
-export type uploadRecordingResponse201 = {
-  data: void
-  status: 201
+export type uploadRecordingResponse202 = {
+  data: Recording
+  status: 202
 }
 
 export type uploadRecordingResponse400 = {
@@ -146,7 +566,7 @@ export type uploadRecordingResponse500 = {
   status: 500
 }
 
-export type uploadRecordingResponseSuccess = (uploadRecordingResponse201) & {
+export type uploadRecordingResponseSuccess = (uploadRecordingResponse202) & {
   headers: Headers;
 };
 export type uploadRecordingResponseError = (uploadRecordingResponse400 | uploadRecordingResponse422 | uploadRecordingResponse500) & {
@@ -170,6 +590,9 @@ export const uploadRecording = async (uploadRecordingBody?: UploadRecordingBody,
     const formData = new FormData();
 if(uploadRecordingBody?.title !== undefined) {
  formData.append(`title`, uploadRecordingBody.title);
+ }
+if(uploadRecordingBody?.meeting_at !== undefined) {
+ formData.append(`meeting_at`, uploadRecordingBody.meeting_at);
  }
 if(uploadRecordingBody?.file !== undefined) {
  formData.append(`file`, uploadRecordingBody.file);
@@ -226,6 +649,1518 @@ export function createUploadRecording<TData = Awaited<ReturnType<typeof uploadRe
 
 
   const query = createQuery(() => getUploadRecordingQueryOptions(uploadRecordingBody?.(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type getRecordingAudioResponse200 = {
+  data: Blob
+  status: 200
+}
+
+export type getRecordingAudioResponse206 = {
+  data: Blob
+  status: 206
+}
+
+export type getRecordingAudioResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getRecordingAudioResponse500 = {
+  data: void
+  status: 500
+}
+
+export type getRecordingAudioResponseSuccess = (getRecordingAudioResponse200 | getRecordingAudioResponse206) & {
+  headers: Headers;
+};
+export type getRecordingAudioResponseError = (getRecordingAudioResponse404 | getRecordingAudioResponse500) & {
+  headers: Headers;
+};
+
+export type getRecordingAudioResponse = (getRecordingAudioResponseSuccess | getRecordingAudioResponseError)
+
+export const getGetRecordingAudioUrl = (id: string,) => {
+
+
+
+
+  return `/recordings/${id}/audio`
+}
+
+/**
+ * Streams the raw audio file of a recording directly from object storage.
+ * Supports HTTP range requests so the browser can seek while playing.
+ */
+export const getRecordingAudio = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getRecordingAudioResponse> => {
+
+  return customFetch<getRecordingAudioResponse>(getGetRecordingAudioUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRecordingAudioQueryKey = (id: string,) => {
+    return [
+    `/recordings/${id}/audio`
+    ] as const;
+    }
+
+
+export const getGetRecordingAudioQueryOptions = <TData = Awaited<ReturnType<typeof getRecordingAudio>>, TError = void>(id: string, options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getRecordingAudio>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRecordingAudioQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecordingAudio>>> = ({ signal }) => getRecordingAudio(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined,  staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof getRecordingAudio>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetRecordingAudioQueryResult = NonNullable<Awaited<ReturnType<typeof getRecordingAudio>>>
+export type GetRecordingAudioQueryError = void
+
+
+
+export function createGetRecordingAudio<TData = Awaited<ReturnType<typeof getRecordingAudio>>, TError = void>(
+ id: () =>  string, options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getRecordingAudio>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getGetRecordingAudioQueryOptions(id(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type getConversationsResponse200 = {
+  data: ConversationSummary[]
+  status: 200
+}
+
+export type getConversationsResponse500 = {
+  data: void
+  status: 500
+}
+
+export type getConversationsResponseSuccess = (getConversationsResponse200) & {
+  headers: Headers;
+};
+export type getConversationsResponseError = (getConversationsResponse500) & {
+  headers: Headers;
+};
+
+export type getConversationsResponse = (getConversationsResponseSuccess | getConversationsResponseError)
+
+export const getGetConversationsUrl = () => {
+
+
+
+
+  return `/conversations`
+}
+
+/**
+ * Get all conversations, newest first.
+ */
+export const getConversations = async ( options?: Parameters<typeof customFetch>[1]): Promise<getConversationsResponse> => {
+
+  return customFetch<getConversationsResponse>(getGetConversationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetConversationsQueryKey = () => {
+    return [
+    `/conversations`
+    ] as const;
+    }
+
+
+export const getGetConversationsQueryOptions = <TData = Awaited<ReturnType<typeof getConversations>>, TError = void>( options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetConversationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getConversations>>> = ({ signal }) => getConversations({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof getConversations>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetConversationsQueryResult = NonNullable<Awaited<ReturnType<typeof getConversations>>>
+export type GetConversationsQueryError = void
+
+
+
+export function createGetConversations<TData = Awaited<ReturnType<typeof getConversations>>, TError = void>(
+  options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getGetConversationsQueryOptions(options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type getConversationResponse200 = {
+  data: Conversation
+  status: 200
+}
+
+export type getConversationResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getConversationResponse500 = {
+  data: void
+  status: 500
+}
+
+export type getConversationResponseSuccess = (getConversationResponse200) & {
+  headers: Headers;
+};
+export type getConversationResponseError = (getConversationResponse404 | getConversationResponse500) & {
+  headers: Headers;
+};
+
+export type getConversationResponse = (getConversationResponseSuccess | getConversationResponseError)
+
+export const getGetConversationUrl = (id: string,) => {
+
+
+
+
+  return `/conversations/${id}`
+}
+
+/**
+ * Get a single conversation including its transcript segments.
+ */
+export const getConversation = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getConversationResponse> => {
+
+  return customFetch<getConversationResponse>(getGetConversationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetConversationQueryKey = (id: string,) => {
+    return [
+    `/conversations/${id}`
+    ] as const;
+    }
+
+
+export const getGetConversationQueryOptions = <TData = Awaited<ReturnType<typeof getConversation>>, TError = void>(id: string, options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetConversationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getConversation>>> = ({ signal }) => getConversation(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined,  staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetConversationQueryResult = NonNullable<Awaited<ReturnType<typeof getConversation>>>
+export type GetConversationQueryError = void
+
+
+
+export function createGetConversation<TData = Awaited<ReturnType<typeof getConversation>>, TError = void>(
+ id: () =>  string, options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getGetConversationQueryOptions(id(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type setSegmentIgnoredResponse200 = {
+  data: ConversationSegment
+  status: 200
+}
+
+export type setSegmentIgnoredResponse404 = {
+  data: void
+  status: 404
+}
+
+export type setSegmentIgnoredResponse409 = {
+  data: void
+  status: 409
+}
+
+export type setSegmentIgnoredResponse500 = {
+  data: void
+  status: 500
+}
+
+export type setSegmentIgnoredResponseSuccess = (setSegmentIgnoredResponse200) & {
+  headers: Headers;
+};
+export type setSegmentIgnoredResponseError = (setSegmentIgnoredResponse404 | setSegmentIgnoredResponse409 | setSegmentIgnoredResponse500) & {
+  headers: Headers;
+};
+
+export type setSegmentIgnoredResponse = (setSegmentIgnoredResponseSuccess | setSegmentIgnoredResponseError)
+
+export const getSetSegmentIgnoredUrl = (id: string,
+    segmentId: string,) => {
+
+
+
+
+  return `/conversations/${id}/segments/${segmentId}/ignore`
+}
+
+/**
+ * Mark a segment as ignored (or restore it). Only segments belonging to an
+ * unidentified speaker can be ignored, since those are the ones that cannot
+ * be attributed. Ignored segments remain in the transcript but no longer
+ * count towards the conversation's unknown speaker count.
+ */
+export const setSegmentIgnored = async (id: string,
+    segmentId: string,
+    setSegmentIgnoredBody?: SetSegmentIgnoredBody, options?: Parameters<typeof customFetch>[1]): Promise<setSegmentIgnoredResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<setSegmentIgnoredResponse>(getSetSegmentIgnoredUrl(id,segmentId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(setSegmentIgnoredBody)
+  }
+);}
+
+
+
+
+
+export const getSetSegmentIgnoredQueryKey = (id: string,
+    segmentId: string,
+    setSegmentIgnoredBody?: SetSegmentIgnoredBody,) => {
+    return [
+    'PATCH', `/conversations/${id}/segments/${segmentId}/ignore`, setSegmentIgnoredBody
+    ] as const;
+    }
+
+
+export const getSetSegmentIgnoredQueryOptions = <TData = Awaited<ReturnType<typeof setSegmentIgnored>>, TError = void>(id: string,
+    segmentId: string,
+    setSegmentIgnoredBody?: SetSegmentIgnoredBody, options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof setSegmentIgnored>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSetSegmentIgnoredQueryKey(id,segmentId,setSegmentIgnoredBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof setSegmentIgnored>>> = ({ signal }) => setSegmentIgnored(id,segmentId,setSegmentIgnoredBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && segmentId !== null && segmentId !== undefined,  staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof setSegmentIgnored>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type SetSegmentIgnoredQueryResult = NonNullable<Awaited<ReturnType<typeof setSegmentIgnored>>>
+export type SetSegmentIgnoredQueryError = void
+
+
+
+export function createSetSegmentIgnored<TData = Awaited<ReturnType<typeof setSegmentIgnored>>, TError = void>(
+ id: () =>  string,
+    segmentId: () =>  string,
+    setSegmentIgnoredBody?: () =>  SetSegmentIgnoredBody, options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof setSegmentIgnored>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getSetSegmentIgnoredQueryOptions(id(),
+    segmentId(),
+    setSegmentIgnoredBody?.(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type getSpeakersResponse200 = {
+  data: Speaker[]
+  status: 200
+}
+
+export type getSpeakersResponse500 = {
+  data: void
+  status: 500
+}
+
+export type getSpeakersResponseSuccess = (getSpeakersResponse200) & {
+  headers: Headers;
+};
+export type getSpeakersResponseError = (getSpeakersResponse500) & {
+  headers: Headers;
+};
+
+export type getSpeakersResponse = (getSpeakersResponseSuccess | getSpeakersResponseError)
+
+export const getGetSpeakersUrl = () => {
+
+
+
+
+  return `/speakers`
+}
+
+/**
+ * Get all speakers. Speakers with a null name are unknown and can be assigned.
+ */
+export const getSpeakers = async ( options?: Parameters<typeof customFetch>[1]): Promise<getSpeakersResponse> => {
+
+  return customFetch<getSpeakersResponse>(getGetSpeakersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSpeakersQueryKey = () => {
+    return [
+    `/speakers`
+    ] as const;
+    }
+
+
+export const getGetSpeakersQueryOptions = <TData = Awaited<ReturnType<typeof getSpeakers>>, TError = void>( options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getSpeakers>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSpeakersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSpeakers>>> = ({ signal }) => getSpeakers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof getSpeakers>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetSpeakersQueryResult = NonNullable<Awaited<ReturnType<typeof getSpeakers>>>
+export type GetSpeakersQueryError = void
+
+
+
+export function createGetSpeakers<TData = Awaited<ReturnType<typeof getSpeakers>>, TError = void>(
+  options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getSpeakers>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getGetSpeakersQueryOptions(options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type createSpeakerResponse201 = {
+  data: Speaker
+  status: 201
+}
+
+export type createSpeakerResponse400 = {
+  data: void
+  status: 400
+}
+
+export type createSpeakerResponse500 = {
+  data: void
+  status: 500
+}
+
+export type createSpeakerResponseSuccess = (createSpeakerResponse201) & {
+  headers: Headers;
+};
+export type createSpeakerResponseError = (createSpeakerResponse400 | createSpeakerResponse500) & {
+  headers: Headers;
+};
+
+export type createSpeakerResponse = (createSpeakerResponseSuccess | createSpeakerResponseError)
+
+export const getCreateSpeakerUrl = () => {
+
+
+
+
+  return `/speakers`
+}
+
+/**
+ * Create a named speaker.
+ */
+export const createSpeaker = async (createSpeakerBody?: CreateSpeakerBody, options?: Parameters<typeof customFetch>[1]): Promise<createSpeakerResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<createSpeakerResponse>(getCreateSpeakerUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createSpeakerBody)
+  }
+);}
+
+
+
+
+
+export const getCreateSpeakerQueryKey = (createSpeakerBody?: CreateSpeakerBody,) => {
+    return [
+    'POST', `/speakers`, createSpeakerBody
+    ] as const;
+    }
+
+
+export const getCreateSpeakerQueryOptions = <TData = Awaited<ReturnType<typeof createSpeaker>>, TError = void>(createSpeakerBody?: CreateSpeakerBody, options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof createSpeaker>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCreateSpeakerQueryKey(createSpeakerBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof createSpeaker>>> = ({ signal }) => createSpeaker(createSpeakerBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof createSpeaker>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CreateSpeakerQueryResult = NonNullable<Awaited<ReturnType<typeof createSpeaker>>>
+export type CreateSpeakerQueryError = void
+
+
+
+export function createCreateSpeaker<TData = Awaited<ReturnType<typeof createSpeaker>>, TError = void>(
+ createSpeakerBody?: () =>  CreateSpeakerBody, options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof createSpeaker>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getCreateSpeakerQueryOptions(createSpeakerBody?.(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type getSpeakerResponse200 = {
+  data: SpeakerDetail
+  status: 200
+}
+
+export type getSpeakerResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getSpeakerResponse500 = {
+  data: void
+  status: 500
+}
+
+export type getSpeakerResponseSuccess = (getSpeakerResponse200) & {
+  headers: Headers;
+};
+export type getSpeakerResponseError = (getSpeakerResponse404 | getSpeakerResponse500) & {
+  headers: Headers;
+};
+
+export type getSpeakerResponse = (getSpeakerResponseSuccess | getSpeakerResponseError)
+
+export const getGetSpeakerUrl = (id: string,) => {
+
+
+
+
+  return `/speakers/${id}`
+}
+
+/**
+ * Get a single speaker including their embeddings and segments.
+ */
+export const getSpeaker = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getSpeakerResponse> => {
+
+  return customFetch<getSpeakerResponse>(getGetSpeakerUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSpeakerQueryKey = (id: string,) => {
+    return [
+    `/speakers/${id}`
+    ] as const;
+    }
+
+
+export const getGetSpeakerQueryOptions = <TData = Awaited<ReturnType<typeof getSpeaker>>, TError = void>(id: string, options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getSpeaker>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSpeakerQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSpeaker>>> = ({ signal }) => getSpeaker(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined,  staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof getSpeaker>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetSpeakerQueryResult = NonNullable<Awaited<ReturnType<typeof getSpeaker>>>
+export type GetSpeakerQueryError = void
+
+
+
+export function createGetSpeaker<TData = Awaited<ReturnType<typeof getSpeaker>>, TError = void>(
+ id: () =>  string, options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getSpeaker>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getGetSpeakerQueryOptions(id(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type updateSpeakerResponse200 = {
+  data: Speaker
+  status: 200
+}
+
+export type updateSpeakerResponse400 = {
+  data: void
+  status: 400
+}
+
+export type updateSpeakerResponse404 = {
+  data: void
+  status: 404
+}
+
+export type updateSpeakerResponse500 = {
+  data: void
+  status: 500
+}
+
+export type updateSpeakerResponseSuccess = (updateSpeakerResponse200) & {
+  headers: Headers;
+};
+export type updateSpeakerResponseError = (updateSpeakerResponse400 | updateSpeakerResponse404 | updateSpeakerResponse500) & {
+  headers: Headers;
+};
+
+export type updateSpeakerResponse = (updateSpeakerResponseSuccess | updateSpeakerResponseError)
+
+export const getUpdateSpeakerUrl = (id: string,) => {
+
+
+
+
+  return `/speakers/${id}`
+}
+
+/**
+ * Update a speaker's name, email or company.
+ */
+export const updateSpeaker = async (id: string,
+    updateSpeakerBody?: UpdateSpeakerBody, options?: Parameters<typeof customFetch>[1]): Promise<updateSpeakerResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<updateSpeakerResponse>(getUpdateSpeakerUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateSpeakerBody)
+  }
+);}
+
+
+
+
+
+export const getUpdateSpeakerQueryKey = (id: string,
+    updateSpeakerBody?: UpdateSpeakerBody,) => {
+    return [
+    'PATCH', `/speakers/${id}`, updateSpeakerBody
+    ] as const;
+    }
+
+
+export const getUpdateSpeakerQueryOptions = <TData = Awaited<ReturnType<typeof updateSpeaker>>, TError = void>(id: string,
+    updateSpeakerBody?: UpdateSpeakerBody, options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof updateSpeaker>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getUpdateSpeakerQueryKey(id,updateSpeakerBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof updateSpeaker>>> = ({ signal }) => updateSpeaker(id,updateSpeakerBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined,  staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof updateSpeaker>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type UpdateSpeakerQueryResult = NonNullable<Awaited<ReturnType<typeof updateSpeaker>>>
+export type UpdateSpeakerQueryError = void
+
+
+
+export function createUpdateSpeaker<TData = Awaited<ReturnType<typeof updateSpeaker>>, TError = void>(
+ id: () =>  string,
+    updateSpeakerBody?: () =>  UpdateSpeakerBody, options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof updateSpeaker>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getUpdateSpeakerQueryOptions(id(),
+    updateSpeakerBody?.(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type deleteSpeakerResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteSpeakerResponse400 = {
+  data: void
+  status: 400
+}
+
+export type deleteSpeakerResponse404 = {
+  data: void
+  status: 404
+}
+
+export type deleteSpeakerResponse500 = {
+  data: void
+  status: 500
+}
+
+export type deleteSpeakerResponseSuccess = (deleteSpeakerResponse204) & {
+  headers: Headers;
+};
+export type deleteSpeakerResponseError = (deleteSpeakerResponse400 | deleteSpeakerResponse404 | deleteSpeakerResponse500) & {
+  headers: Headers;
+};
+
+export type deleteSpeakerResponse = (deleteSpeakerResponseSuccess | deleteSpeakerResponseError)
+
+export const getDeleteSpeakerUrl = (id: string,) => {
+
+
+
+
+  return `/speakers/${id}`
+}
+
+/**
+ * Delete a speaker. Fails if the speaker still has segments.
+ */
+export const deleteSpeaker = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteSpeakerResponse> => {
+
+  return customFetch<deleteSpeakerResponse>(getDeleteSpeakerUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteSpeakerQueryKey = (id: string,) => {
+    return [
+    'DELETE', `/speakers/${id}`
+    ] as const;
+    }
+
+
+export const getDeleteSpeakerQueryOptions = <TData = Awaited<ReturnType<typeof deleteSpeaker>>, TError = void>(id: string, options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof deleteSpeaker>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteSpeakerQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteSpeaker>>> = ({ signal }) => deleteSpeaker(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined,  staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof deleteSpeaker>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteSpeakerQueryResult = NonNullable<Awaited<ReturnType<typeof deleteSpeaker>>>
+export type DeleteSpeakerQueryError = void
+
+
+
+export function createDeleteSpeaker<TData = Awaited<ReturnType<typeof deleteSpeaker>>, TError = void>(
+ id: () =>  string, options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof deleteSpeaker>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getDeleteSpeakerQueryOptions(id(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type assignSpeakerResponse200 = {
+  data: Speaker
+  status: 200
+}
+
+export type assignSpeakerResponse400 = {
+  data: void
+  status: 400
+}
+
+export type assignSpeakerResponse404 = {
+  data: void
+  status: 404
+}
+
+export type assignSpeakerResponse409 = {
+  data: void
+  status: 409
+}
+
+export type assignSpeakerResponse500 = {
+  data: void
+  status: 500
+}
+
+export type assignSpeakerResponseSuccess = (assignSpeakerResponse200) & {
+  headers: Headers;
+};
+export type assignSpeakerResponseError = (assignSpeakerResponse400 | assignSpeakerResponse404 | assignSpeakerResponse409 | assignSpeakerResponse500) & {
+  headers: Headers;
+};
+
+export type assignSpeakerResponse = (assignSpeakerResponseSuccess | assignSpeakerResponseError)
+
+export const getAssignSpeakerUrl = (id: string,) => {
+
+
+
+
+  return `/speakers/${id}/assign`
+}
+
+/**
+ * Assign an unknown speaker (name == null).
+ *
+ * - Provide `target_speaker_id` to merge this unknown speaker into an
+ *   existing speaker: all embeddings and segments are moved to the target
+ *   speaker and the unknown speaker is deleted.
+ * - Provide `name` to give the unknown speaker a name in place. Optionally
+ *   `email` and `company_id` are applied as well.
+ */
+export const assignSpeaker = async (id: string,
+    assignSpeakerBody?: AssignSpeakerBody, options?: Parameters<typeof customFetch>[1]): Promise<assignSpeakerResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<assignSpeakerResponse>(getAssignSpeakerUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(assignSpeakerBody)
+  }
+);}
+
+
+
+
+
+export const getAssignSpeakerQueryKey = (id: string,
+    assignSpeakerBody?: AssignSpeakerBody,) => {
+    return [
+    'POST', `/speakers/${id}/assign`, assignSpeakerBody
+    ] as const;
+    }
+
+
+export const getAssignSpeakerQueryOptions = <TData = Awaited<ReturnType<typeof assignSpeaker>>, TError = void>(id: string,
+    assignSpeakerBody?: AssignSpeakerBody, options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof assignSpeaker>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAssignSpeakerQueryKey(id,assignSpeakerBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof assignSpeaker>>> = ({ signal }) => assignSpeaker(id,assignSpeakerBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined,  staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof assignSpeaker>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AssignSpeakerQueryResult = NonNullable<Awaited<ReturnType<typeof assignSpeaker>>>
+export type AssignSpeakerQueryError = void
+
+
+
+export function createAssignSpeaker<TData = Awaited<ReturnType<typeof assignSpeaker>>, TError = void>(
+ id: () =>  string,
+    assignSpeakerBody?: () =>  AssignSpeakerBody, options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof assignSpeaker>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getAssignSpeakerQueryOptions(id(),
+    assignSpeakerBody?.(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type getCompaniesResponse200 = {
+  data: Company[]
+  status: 200
+}
+
+export type getCompaniesResponse500 = {
+  data: void
+  status: 500
+}
+
+export type getCompaniesResponseSuccess = (getCompaniesResponse200) & {
+  headers: Headers;
+};
+export type getCompaniesResponseError = (getCompaniesResponse500) & {
+  headers: Headers;
+};
+
+export type getCompaniesResponse = (getCompaniesResponseSuccess | getCompaniesResponseError)
+
+export const getGetCompaniesUrl = () => {
+
+
+
+
+  return `/companies`
+}
+
+/**
+ * Get all companies.
+ */
+export const getCompanies = async ( options?: Parameters<typeof customFetch>[1]): Promise<getCompaniesResponse> => {
+
+  return customFetch<getCompaniesResponse>(getGetCompaniesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCompaniesQueryKey = () => {
+    return [
+    `/companies`
+    ] as const;
+    }
+
+
+export const getGetCompaniesQueryOptions = <TData = Awaited<ReturnType<typeof getCompanies>>, TError = void>( options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getCompanies>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCompaniesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompanies>>> = ({ signal }) => getCompanies({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof getCompanies>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCompaniesQueryResult = NonNullable<Awaited<ReturnType<typeof getCompanies>>>
+export type GetCompaniesQueryError = void
+
+
+
+export function createGetCompanies<TData = Awaited<ReturnType<typeof getCompanies>>, TError = void>(
+  options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof getCompanies>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getGetCompaniesQueryOptions(options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type createCompanyResponse201 = {
+  data: Company
+  status: 201
+}
+
+export type createCompanyResponse400 = {
+  data: void
+  status: 400
+}
+
+export type createCompanyResponse500 = {
+  data: void
+  status: 500
+}
+
+export type createCompanyResponseSuccess = (createCompanyResponse201) & {
+  headers: Headers;
+};
+export type createCompanyResponseError = (createCompanyResponse400 | createCompanyResponse500) & {
+  headers: Headers;
+};
+
+export type createCompanyResponse = (createCompanyResponseSuccess | createCompanyResponseError)
+
+export const getCreateCompanyUrl = () => {
+
+
+
+
+  return `/companies`
+}
+
+/**
+ * Create a company.
+ */
+export const createCompany = async (companyBody?: CompanyBody, options?: Parameters<typeof customFetch>[1]): Promise<createCompanyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<createCompanyResponse>(getCreateCompanyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(companyBody)
+  }
+);}
+
+
+
+
+
+export const getCreateCompanyQueryKey = (companyBody?: CompanyBody,) => {
+    return [
+    'POST', `/companies`, companyBody
+    ] as const;
+    }
+
+
+export const getCreateCompanyQueryOptions = <TData = Awaited<ReturnType<typeof createCompany>>, TError = void>(companyBody?: CompanyBody, options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof createCompany>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCreateCompanyQueryKey(companyBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof createCompany>>> = ({ signal }) => createCompany(companyBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof createCompany>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CreateCompanyQueryResult = NonNullable<Awaited<ReturnType<typeof createCompany>>>
+export type CreateCompanyQueryError = void
+
+
+
+export function createCreateCompany<TData = Awaited<ReturnType<typeof createCompany>>, TError = void>(
+ companyBody?: () =>  CompanyBody, options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof createCompany>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getCreateCompanyQueryOptions(companyBody?.(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type updateCompanyResponse200 = {
+  data: Company
+  status: 200
+}
+
+export type updateCompanyResponse400 = {
+  data: void
+  status: 400
+}
+
+export type updateCompanyResponse404 = {
+  data: void
+  status: 404
+}
+
+export type updateCompanyResponse500 = {
+  data: void
+  status: 500
+}
+
+export type updateCompanyResponseSuccess = (updateCompanyResponse200) & {
+  headers: Headers;
+};
+export type updateCompanyResponseError = (updateCompanyResponse400 | updateCompanyResponse404 | updateCompanyResponse500) & {
+  headers: Headers;
+};
+
+export type updateCompanyResponse = (updateCompanyResponseSuccess | updateCompanyResponseError)
+
+export const getUpdateCompanyUrl = (id: string,) => {
+
+
+
+
+  return `/companies/${id}`
+}
+
+/**
+ * Update a company's name.
+ */
+export const updateCompany = async (id: string,
+    companyBody?: CompanyBody, options?: Parameters<typeof customFetch>[1]): Promise<updateCompanyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<updateCompanyResponse>(getUpdateCompanyUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(companyBody)
+  }
+);}
+
+
+
+
+
+export const getUpdateCompanyQueryKey = (id: string,
+    companyBody?: CompanyBody,) => {
+    return [
+    'PATCH', `/companies/${id}`, companyBody
+    ] as const;
+    }
+
+
+export const getUpdateCompanyQueryOptions = <TData = Awaited<ReturnType<typeof updateCompany>>, TError = void>(id: string,
+    companyBody?: CompanyBody, options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof updateCompany>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getUpdateCompanyQueryKey(id,companyBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof updateCompany>>> = ({ signal }) => updateCompany(id,companyBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined,  staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof updateCompany>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type UpdateCompanyQueryResult = NonNullable<Awaited<ReturnType<typeof updateCompany>>>
+export type UpdateCompanyQueryError = void
+
+
+
+export function createUpdateCompany<TData = Awaited<ReturnType<typeof updateCompany>>, TError = void>(
+ id: () =>  string,
+    companyBody?: () =>  CompanyBody, options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof updateCompany>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getUpdateCompanyQueryOptions(id(),
+    companyBody?.(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return query
+}
+
+
+
+
+
+
+
+export type deleteCompanyResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteCompanyResponse404 = {
+  data: void
+  status: 404
+}
+
+export type deleteCompanyResponse500 = {
+  data: void
+  status: 500
+}
+
+export type deleteCompanyResponseSuccess = (deleteCompanyResponse204) & {
+  headers: Headers;
+};
+export type deleteCompanyResponseError = (deleteCompanyResponse404 | deleteCompanyResponse500) & {
+  headers: Headers;
+};
+
+export type deleteCompanyResponse = (deleteCompanyResponseSuccess | deleteCompanyResponseError)
+
+export const getDeleteCompanyUrl = (id: string,) => {
+
+
+
+
+  return `/companies/${id}`
+}
+
+/**
+ * Delete a company. Speakers attached to it are detached.
+ */
+export const deleteCompany = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteCompanyResponse> => {
+
+  return customFetch<deleteCompanyResponse>(getDeleteCompanyUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteCompanyQueryKey = (id: string,) => {
+    return [
+    'DELETE', `/companies/${id}`
+    ] as const;
+    }
+
+
+export const getDeleteCompanyQueryOptions = <TData = Awaited<ReturnType<typeof deleteCompany>>, TError = void>(id: string, options?: { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof deleteCompany>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteCompanyQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteCompany>>> = ({ signal }) => deleteCompany(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined,  staleTime: 10000,  ...queryOptions} as CreateQueryOptions<Awaited<ReturnType<typeof deleteCompany>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteCompanyQueryResult = NonNullable<Awaited<ReturnType<typeof deleteCompany>>>
+export type DeleteCompanyQueryError = void
+
+
+
+export function createDeleteCompany<TData = Awaited<ReturnType<typeof deleteCompany>>, TError = void>(
+ id: () =>  string, options?: () => { query?:Partial<CreateQueryOptions<Awaited<ReturnType<typeof deleteCompany>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: () => QueryClient
+ ): CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+
+
+  const query = createQuery(() => getDeleteCompanyQueryOptions(id(),options?.()), queryClient) as CreateQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
   return query
 }

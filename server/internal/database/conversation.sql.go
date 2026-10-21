@@ -7,10 +7,259 @@ package database
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const getConversation = `-- name: GetConversation :one
+SELECT
+  c.id,
+  c.title,
+  c.summary,
+  c.length,
+  c.cost,
+  c.language,
+  c.created_at,
+  c.meeting_at,
+  c.recording_id,
+  r.status AS recording_status,
+  COUNT(DISTINCT s.speaker_id)::int AS speaker_count,
+  COUNT(DISTINCT s.speaker_id) FILTER (WHERE sp.name IS NULL AND NOT s.ignored)::int AS unknown_speaker_count
+FROM conversation c
+JOIN recording r ON r.id = c.recording_id
+LEFT JOIN segment s ON s.conversation_id = c.id
+LEFT JOIN speaker sp ON sp.id = s.speaker_id
+WHERE c.id = $1 AND r.user_id = $2
+GROUP BY c.id, r.status
+`
+
+type GetConversationParams struct {
+	ID     uuid.UUID
+	UserID *uuid.UUID
+}
+
+type GetConversationRow struct {
+	ID                  uuid.UUID
+	Title               string
+	Summary             pgtype.Text
+	Length              float64
+	Cost                float64
+	Language            string
+	CreatedAt           time.Time
+	MeetingAt           *time.Time
+	RecordingID         uuid.UUID
+	RecordingStatus     string
+	SpeakerCount        int32
+	UnknownSpeakerCount int32
+}
+
+func (q *Queries) GetConversation(ctx context.Context, arg GetConversationParams) (GetConversationRow, error) {
+	row := q.db.QueryRow(ctx, getConversation, arg.ID, arg.UserID)
+	var i GetConversationRow
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Summary,
+		&i.Length,
+		&i.Cost,
+		&i.Language,
+		&i.CreatedAt,
+		&i.MeetingAt,
+		&i.RecordingID,
+		&i.RecordingStatus,
+		&i.SpeakerCount,
+		&i.UnknownSpeakerCount,
+	)
+	return i, err
+}
+
+const getConversationSegment = `-- name: GetConversationSegment :one
+SELECT
+  s.id,
+  s.text,
+  s.start_time,
+  s.end_time,
+  s.duration,
+  s.speaker_id,
+  sp.name AS speaker_name,
+  s.ignored
+FROM segment s
+LEFT JOIN speaker sp ON sp.id = s.speaker_id
+JOIN conversation c ON c.id = s.conversation_id
+JOIN recording r ON r.id = c.recording_id
+WHERE s.conversation_id = $1 AND s.id = $2 AND r.user_id = $3
+`
+
+type GetConversationSegmentParams struct {
+	ConversationID uuid.UUID
+	ID             uuid.UUID
+	UserID         *uuid.UUID
+}
+
+type GetConversationSegmentRow struct {
+	ID          uuid.UUID
+	Text        pgtype.Text
+	StartTime   pgtype.Float8
+	EndTime     pgtype.Float8
+	Duration    pgtype.Float8
+	SpeakerID   uuid.UUID
+	SpeakerName pgtype.Text
+	Ignored     bool
+}
+
+func (q *Queries) GetConversationSegment(ctx context.Context, arg GetConversationSegmentParams) (GetConversationSegmentRow, error) {
+	row := q.db.QueryRow(ctx, getConversationSegment, arg.ConversationID, arg.ID, arg.UserID)
+	var i GetConversationSegmentRow
+	err := row.Scan(
+		&i.ID,
+		&i.Text,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Duration,
+		&i.SpeakerID,
+		&i.SpeakerName,
+		&i.Ignored,
+	)
+	return i, err
+}
+
+const getConversations = `-- name: GetConversations :many
+SELECT
+  c.id,
+  c.title,
+  c.summary,
+  c.length,
+  c.cost,
+  c.language,
+  c.created_at,
+  c.meeting_at,
+  c.recording_id,
+  r.status AS recording_status,
+  COUNT(DISTINCT s.speaker_id)::int AS speaker_count,
+  -- Only count unidentified speakers that still have segments the user has not
+  -- dismissed, so ignoring noise clears the warning.
+  COUNT(DISTINCT s.speaker_id) FILTER (WHERE sp.name IS NULL AND NOT s.ignored)::int AS unknown_speaker_count
+FROM conversation c
+JOIN recording r ON r.id = c.recording_id
+LEFT JOIN segment s ON s.conversation_id = c.id
+LEFT JOIN speaker sp ON sp.id = s.speaker_id
+WHERE r.user_id = $1
+GROUP BY c.id, r.status
+ORDER BY COALESCE(c.meeting_at, c.created_at) DESC
+`
+
+type GetConversationsRow struct {
+	ID                  uuid.UUID
+	Title               string
+	Summary             pgtype.Text
+	Length              float64
+	Cost                float64
+	Language            string
+	CreatedAt           time.Time
+	MeetingAt           *time.Time
+	RecordingID         uuid.UUID
+	RecordingStatus     string
+	SpeakerCount        int32
+	UnknownSpeakerCount int32
+}
+
+func (q *Queries) GetConversations(ctx context.Context, userID *uuid.UUID) ([]GetConversationsRow, error) {
+	rows, err := q.db.Query(ctx, getConversations, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetConversationsRow
+	for rows.Next() {
+		var i GetConversationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Summary,
+			&i.Length,
+			&i.Cost,
+			&i.Language,
+			&i.CreatedAt,
+			&i.MeetingAt,
+			&i.RecordingID,
+			&i.RecordingStatus,
+			&i.SpeakerCount,
+			&i.UnknownSpeakerCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSegmentsByConversation = `-- name: GetSegmentsByConversation :many
+SELECT
+  s.id,
+  s.text,
+  s.start_time,
+  s.end_time,
+  s.duration,
+  s.speaker_id,
+  sp.name AS speaker_name,
+  s.ignored
+FROM segment s
+LEFT JOIN speaker sp ON sp.id = s.speaker_id
+JOIN conversation c ON c.id = s.conversation_id
+JOIN recording r ON r.id = c.recording_id
+WHERE s.conversation_id = $1 AND r.user_id = $2
+ORDER BY s.start_time ASC
+`
+
+type GetSegmentsByConversationParams struct {
+	ConversationID uuid.UUID
+	UserID         *uuid.UUID
+}
+
+type GetSegmentsByConversationRow struct {
+	ID          uuid.UUID
+	Text        pgtype.Text
+	StartTime   pgtype.Float8
+	EndTime     pgtype.Float8
+	Duration    pgtype.Float8
+	SpeakerID   uuid.UUID
+	SpeakerName pgtype.Text
+	Ignored     bool
+}
+
+func (q *Queries) GetSegmentsByConversation(ctx context.Context, arg GetSegmentsByConversationParams) ([]GetSegmentsByConversationRow, error) {
+	rows, err := q.db.Query(ctx, getSegmentsByConversation, arg.ConversationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSegmentsByConversationRow
+	for rows.Next() {
+		var i GetSegmentsByConversationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Text,
+			&i.StartTime,
+			&i.EndTime,
+			&i.Duration,
+			&i.SpeakerID,
+			&i.SpeakerName,
+			&i.Ignored,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const insertConversation = `-- name: InsertConversation :one
 INSERT INTO conversation (
@@ -20,7 +269,8 @@ INSERT INTO conversation (
   language,
   language_confidence,
   recording_id,
-  summary
+  summary,
+  meeting_at
 ) VALUES ( 
   $1,
   $2,
@@ -28,7 +278,8 @@ INSERT INTO conversation (
   $4,
   $5,
   $6,
-  $7
+  $7,
+  $8
 ) returning id
 `
 
@@ -40,6 +291,7 @@ type InsertConversationParams struct {
 	LanguageConfidence float64
 	RecordingID        uuid.UUID
 	Summary            pgtype.Text
+	MeetingAt          *time.Time
 }
 
 func (q *Queries) InsertConversation(ctx context.Context, arg InsertConversationParams) (uuid.UUID, error) {
@@ -51,10 +303,29 @@ func (q *Queries) InsertConversation(ctx context.Context, arg InsertConversation
 		arg.LanguageConfidence,
 		arg.RecordingID,
 		arg.Summary,
+		arg.MeetingAt,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const setSegmentIgnored = `-- name: SetSegmentIgnored :exec
+UPDATE segment
+  SET ignored = $2,
+      updated_at = now()
+  WHERE id = $1 AND conversation_id = $3
+`
+
+type SetSegmentIgnoredParams struct {
+	ID             uuid.UUID
+	Ignored        bool
+	ConversationID uuid.UUID
+}
+
+func (q *Queries) SetSegmentIgnored(ctx context.Context, arg SetSegmentIgnoredParams) error {
+	_, err := q.db.Exec(ctx, setSegmentIgnored, arg.ID, arg.Ignored, arg.ConversationID)
+	return err
 }
 
 const updateConversationSummary = `-- name: UpdateConversationSummary :exec

@@ -11,12 +11,38 @@ import (
 	"github.com/google/uuid"
 )
 
-const getRecordings = `-- name: GetRecordings :many
-SELECT id, path, extension, filename, status FROM recording
+const getRecording = `-- name: GetRecording :one
+SELECT id, path, extension, filename, status, user_id FROM recording
+WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) GetRecordings(ctx context.Context) ([]Recording, error) {
-	rows, err := q.db.Query(ctx, getRecordings)
+type GetRecordingParams struct {
+	ID     uuid.UUID
+	UserID *uuid.UUID
+}
+
+func (q *Queries) GetRecording(ctx context.Context, arg GetRecordingParams) (Recording, error) {
+	row := q.db.QueryRow(ctx, getRecording, arg.ID, arg.UserID)
+	var i Recording
+	err := row.Scan(
+		&i.ID,
+		&i.Path,
+		&i.Extension,
+		&i.Filename,
+		&i.Status,
+		&i.UserID,
+	)
+	return i, err
+}
+
+const getRecordings = `-- name: GetRecordings :many
+SELECT id, path, extension, filename, status, user_id FROM recording
+WHERE user_id = $1
+ORDER BY filename ASC
+`
+
+func (q *Queries) GetRecordings(ctx context.Context, userID *uuid.UUID) ([]Recording, error) {
+	rows, err := q.db.Query(ctx, getRecordings, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -30,6 +56,7 @@ func (q *Queries) GetRecordings(ctx context.Context) ([]Recording, error) {
 			&i.Extension,
 			&i.Filename,
 			&i.Status,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -46,12 +73,14 @@ INSERT INTO recording (
   path,
   extension,
   filename,
-  status
+  status,
+  user_id
 ) VALUES ( 
   $1,
   $2,
   $3,
-  $4
+  $4,
+  $5
 ) returning id
 `
 
@@ -60,6 +89,7 @@ type InsertRecordingParams struct {
 	Extension string
 	Filename  string
 	Status    string
+	UserID    *uuid.UUID
 }
 
 func (q *Queries) InsertRecording(ctx context.Context, arg InsertRecordingParams) (uuid.UUID, error) {
@@ -68,10 +98,27 @@ func (q *Queries) InsertRecording(ctx context.Context, arg InsertRecordingParams
 		arg.Extension,
 		arg.Filename,
 		arg.Status,
+		arg.UserID,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const updateRecordingExtension = `-- name: UpdateRecordingExtension :exec
+UPDATE recording
+  SET extension = $2
+  WHERE id = $1
+`
+
+type UpdateRecordingExtensionParams struct {
+	ID        uuid.UUID
+	Extension string
+}
+
+func (q *Queries) UpdateRecordingExtension(ctx context.Context, arg UpdateRecordingExtensionParams) error {
+	_, err := q.db.Exec(ctx, updateRecordingExtension, arg.ID, arg.Extension)
+	return err
 }
 
 const updateRecordingStatus = `-- name: UpdateRecordingStatus :exec

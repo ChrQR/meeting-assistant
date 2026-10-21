@@ -1,90 +1,161 @@
 package handler
 
 import (
-	"context"
+	"bytes"
 	"errors"
 	"io"
-	"log"
+	"mime"
+	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/ChrQR/meeting-assistant/server/internal/api"
 	"github.com/ChrQR/meeting-assistant/server/internal/types"
 )
 
-func (s *Handlers) UploadRecording(ctx context.Context, req api.UploadRecordingRequestObject) (api.UploadRecordingResponseObject, error) {
+func (s *Handlers) UploadRecording(w http.ResponseWriter, r *http.Request) {
+	userID, ok := s.requireUserID(w, r)
+	if !ok {
+		return
+	}
+
 	var title string
 	var fileBytes []byte
 	var extension string
 	var fileName string
+	var meetingAtValue string
+
+	reader, err := r.MultipartReader()
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "expected multipart/form-data body"})
+		return
+	}
+
 	for {
-		part, err := req.Body.NextPart()
+		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return nil, err
+			writeError(w, "UploadRecording", err)
+			return
 		}
 
 		switch part.FormName() {
 		case "title":
 			data, err := io.ReadAll(part)
 			if err != nil {
-				return nil, err
+				writeError(w, "UploadRecording", err)
+				return
 			}
 			title = string(data)
+		case "meeting_at":
+			data, err := io.ReadAll(part)
+			if err != nil {
+				writeError(w, "UploadRecording", err)
+				return
+			}
+			meetingAtValue = string(data)
 		case "file":
-			fileName := part.FileName()
+			fileName = part.FileName()
 
 			// 2. Extract extension (e.g. ".mp3" -> "mp3")
 			ext := filepath.Ext(fileName)
 			extension = strings.TrimPrefix(ext, ".")
 			data, err := io.ReadAll(part)
 			if err != nil {
-				return nil, err
+				writeError(w, "UploadRecording", err)
+				return
 			}
 			fileBytes = data
 		}
 	}
 	if title == "" || len(fileBytes) == 0 {
-		return api.UploadRecording400Response{}, errors.New("missing required form fields")
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing required form fields"})
+		return
 	}
-	if err := s.TranscriptionService.ProcessRecording(ctx, types.Recording{
+
+	meetingAt, err := types.ParseMeetingAt(meetingAtValue)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	recordingID, err := s.TranscriptionService.StartRecording(r.Context(), types.Recording{
 		Title:     title,
 		FileData:  fileBytes,
 		Extension: extension,
 		FileName:  fileName,
-		UserPath:  "christian", // development value. will be user id later, extracted by auth.
-	}); err != nil {
-		log.Print(err)
-		return api.UploadRecording400Response{}, err
+		UserPath:  userID.String(),
+		MeetingAt: meetingAt,
+		UserID:    userID,
+	})
+	if err != nil {
+		writeError(w, "UploadRecording", err)
+		return
 	}
-	return api.UploadRecording201Response{}, nil
+
+	// Processing happens in the background; the client can keep using the app.
+	writeJSON(w, http.StatusAccepted, api.Recording{
+		Id:        recordingID,
+		Filename:  fileName,
+		Extension: extension,
+		Status:    string(types.RecordingPending),
+	})
 }
 
-func (s *Handlers) GetRecordings(ctx context.Context, req api.GetRecordingsRequestObject) (api.GetRecordingsResponseObject, error) {
-	data, err := s.StoreService.GetRecordings(ctx)
-	if err != nil {
-		return api.GetRecordings500Response{}, err
+func (s *Handlers) GetRecordings(w http.ResponseWriter, r *http.Request) {
+	userID, ok := s.requireUserID(w, r)
+	if !ok {
+		return
 	}
 
-	result := make(api.GetRecordings200JSONResponse, 0, len(data))
+	data, err := s.StoreService.GetRecordings(r.Context(), userID)
+	if err != nil {
+		writeError(w, "GetRecordings", err)
+		return
+	}
 
+	result := make([]api.Recording, 0, len(data))
 	for _, rec := range data {
-		result = append(result, struct {
-			Extension *string    `json:"extension,omitempty"`
-			Filename  *string    `json:"filename,omitempty"`
-			Id        *uuid.UUID `json:"id,omitempty"`
-			Status    *string    `json:"status,omitempty"`
-		}{
-			Extension: &rec.Extension,
-			Filename:  &rec.Filename,
-			Status:    new(string(rec.Status)),
-			Id:        &rec.ID,
+		result = append(result, api.Recording{
+			Extension: rec.Extension,
+			Filename:  rec.Filename,
+			Status:    string(rec.Status),
+			Id:        rec.ID,
 		})
 	}
 
-	return result, nil
+	writeJSON(w, http.StatusOK, result)
+}
+
+// GetRecordingAudio streams the raw recording from object storage. It uses
+// http.ServeContent so that HTTP range requests are supported, enabling the
+// browser to seek within the audio.
+func (s *Handlers) GetRecordingAudio(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	userID, ok := s.requireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	data, file, err := s.StoreService.GetRecordingAudio(r.Context(), userID, id)
+	if err != nil {
+		writeError(w, "GetRecordingAudio", err)
+		return
+	}
+
+	contentType := mime.TypeByExtension("." + strings.TrimPrefix(file.Extension, "."))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", `inline; filename="`+file.Filename+"."+file.Extension+`"`)
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+
+	http.ServeContent(w, r, file.Filename+"."+file.Extension, time.Time{}, bytes.NewReader(data))
 }

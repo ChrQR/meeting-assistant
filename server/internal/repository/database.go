@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ChrQR/meeting-assistant/server/internal/database"
 	"github.com/ChrQR/meeting-assistant/server/internal/types"
@@ -20,13 +21,42 @@ type DBRepository interface {
 	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 	InsertRecording(ctx context.Context, recording types.Recording) (uuid.UUID, error)
 	UpdateRecordingStatus(ctx context.Context, recordingID uuid.UUID, status types.RecordingStatus) error
-	InsertCoversation(ctx context.Context, title string, transcriptions types.Transcription, recordingID uuid.UUID, summary string) (uuid.UUID, error)
+	UpdateRecordingExtension(ctx context.Context, recordingID uuid.UUID, extension string) error
+	InsertCoversation(ctx context.Context, title string, transcriptions types.Transcription, recordingID uuid.UUID, summary string, meetingAt *time.Time) (uuid.UUID, error)
 	InsertSegments(ctx context.Context, segments []types.TranscriptionSegment, conversationID uuid.UUID) error
-	GetBestMatchingSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error)
-	InsertAnonymousSpeaker(ctx context.Context, embedding []float32) (uuid.UUID, error)
+	GetBestMatchingSpeaker(ctx context.Context, userID uuid.UUID, embedding []float32) (types.IdentifiedSpeaker, error)
+	InsertAnonymousSpeaker(ctx context.Context, userID uuid.UUID, embedding []float32) (uuid.UUID, error)
 	PurgeEmbeddings(ctx context.Context, id uuid.UUID) error
 	UpdateConversationSummary(ctx context.Context, summary string, conversationID uuid.UUID) error
-	GetRecordings(ctx context.Context) ([]types.SelectRecording, error)
+	GetRecordings(ctx context.Context, userID uuid.UUID) ([]types.SelectRecording, error)
+	GetRecordingFile(ctx context.Context, userID uuid.UUID, id uuid.UUID) (types.RecordingFile, error)
+	GetConversations(ctx context.Context, userID uuid.UUID) ([]types.ConversationSummary, error)
+	GetConversation(ctx context.Context, userID uuid.UUID, id uuid.UUID) (types.Conversation, error)
+	GetSegmentsByConversation(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID) ([]types.ConversationSegment, error)
+	GetConversationSegment(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID, segmentID uuid.UUID) (types.ConversationSegment, error)
+	SetSegmentIgnored(ctx context.Context, conversationID uuid.UUID, segmentID uuid.UUID, ignored bool) error
+	GetSpeakers(ctx context.Context, userID uuid.UUID) ([]types.Speaker, error)
+	GetSpeakerDetail(ctx context.Context, userID uuid.UUID, id uuid.UUID) (types.SpeakerDetail, error)
+	CreateSpeaker(ctx context.Context, userID uuid.UUID, speaker types.CreateSpeaker) (uuid.UUID, error)
+	UpdateSpeaker(ctx context.Context, userID uuid.UUID, id uuid.UUID, update types.UpdateSpeaker) error
+	DeleteSpeaker(ctx context.Context, userID uuid.UUID, id uuid.UUID) error
+	CountSegmentsBySpeaker(ctx context.Context, userID uuid.UUID, id uuid.UUID) (int, error)
+	MoveSegmentsToSpeaker(ctx context.Context, fromID uuid.UUID, toID uuid.UUID) error
+	MoveEmbeddingsToSpeaker(ctx context.Context, fromID uuid.UUID, toID uuid.UUID) error
+	GetCompanies(ctx context.Context, userID uuid.UUID) ([]types.Company, error)
+	GetCompany(ctx context.Context, userID uuid.UUID, id uuid.UUID) (types.Company, error)
+	CreateCompany(ctx context.Context, userID uuid.UUID, name string) (uuid.UUID, error)
+	UpdateCompany(ctx context.Context, userID uuid.UUID, id uuid.UUID, name string) error
+	DeleteCompany(ctx context.Context, userID uuid.UUID, id uuid.UUID) error
+
+	// Users and linked SSO accounts.
+	GetUser(ctx context.Context, id uuid.UUID) (types.AppUser, error)
+	GetUserByEmail(ctx context.Context, email string) (types.AppUser, error)
+	InsertUser(ctx context.Context, user types.NewUser) (types.AppUser, error)
+	UpdateUserProfile(ctx context.Context, id uuid.UUID, user types.NewUser) error
+	GetAccount(ctx context.Context, provider string, providerAccountID string) (types.Account, error)
+	InsertAccount(ctx context.Context, userID uuid.UUID, provider string, providerAccountID string) error
+	GetAccountsByUser(ctx context.Context, userID uuid.UUID) ([]types.Account, error)
 }
 
 func NewDBRepository(db *database.DB) DBRepository {
@@ -68,6 +98,7 @@ func (r *dbRepository) InsertRecording(ctx context.Context, recording types.Reco
 		Extension: recording.Extension,
 		Path:      recording.UserPath,
 		Status:    string(types.RecordingTranscribing),
+		UserID:    &recording.UserID,
 	})
 	return recordingID, err
 }
@@ -80,7 +111,17 @@ func (r *dbRepository) UpdateRecordingStatus(ctx context.Context, recordingID uu
 	})
 }
 
-func (r *dbRepository) InsertCoversation(ctx context.Context, title string, transcription types.Transcription, recordingID uuid.UUID, summary string) (uuid.UUID, error) {
+// UpdateRecordingExtension records the extension of the file actually stored in
+// object storage, which differs from the uploaded one after normalisation.
+func (r *dbRepository) UpdateRecordingExtension(ctx context.Context, recordingID uuid.UUID, extension string) error {
+	db := r.getQueries(ctx)
+	return db.UpdateRecordingExtension(ctx, database.UpdateRecordingExtensionParams{
+		ID:        recordingID,
+		Extension: extension,
+	})
+}
+
+func (r *dbRepository) InsertCoversation(ctx context.Context, title string, transcription types.Transcription, recordingID uuid.UUID, summary string, meetingAt *time.Time) (uuid.UUID, error) {
 	db := r.getQueries(ctx)
 	conversationID, err := db.InsertConversation(ctx, database.InsertConversationParams{
 		Title:              title,
@@ -93,6 +134,7 @@ func (r *dbRepository) InsertCoversation(ctx context.Context, title string, tran
 			String: summary,
 			Valid:  true,
 		},
+		MeetingAt: meetingAt,
 	})
 	return conversationID, err
 }
@@ -117,18 +159,33 @@ func (r *dbRepository) InsertSegments(ctx context.Context, segments []types.Tran
 	return err
 }
 
-func (r *dbRepository) GetBestMatchingSpeaker(ctx context.Context, embedding []float32) (types.IdentifiedSpeaker, error) {
+// speakerMatchThreshold is the minimum cosine similarity required to consider a
+// voice embedding to belong to an already known speaker.
+//
+// Measured on real meeting audio, the same speaker scores 0.72-0.95 across
+// samples while different people score 0.19-0.26, but noisy samples from
+// different people can reach ~0.72. The ranges overlap, so the threshold is set
+// conservatively: it recognises clear matches without ever silently merging two
+// different people. Ambiguous cases are resolved by the user assigning or
+// merging speakers in the UI.
+const speakerMatchThreshold = 0.85
+
+func (r *dbRepository) GetBestMatchingSpeaker(ctx context.Context, userID uuid.UUID, embedding []float32) (types.IdentifiedSpeaker, error) {
 	db := r.getQueries(ctx)
-	data, err := db.GetBestMatchingSpeaker(ctx, pgvector.NewVector(embedding))
+	data, err := db.GetBestMatchingSpeaker(ctx, database.GetBestMatchingSpeakerParams{
+		Column1:       pgvector.NewVector(embedding),
+		OwnerID:       userID,
+		MinSimilarity: speakerMatchThreshold,
+	})
 	return types.IdentifiedSpeaker{
 		ID:              data.SpeakerID,
 		SimilarityScore: data.SimilarityScore,
 	}, err
 }
 
-func (r *dbRepository) InsertAnonymousSpeaker(ctx context.Context, embedding []float32) (uuid.UUID, error) {
+func (r *dbRepository) InsertAnonymousSpeaker(ctx context.Context, userID uuid.UUID, embedding []float32) (uuid.UUID, error) {
 	db := r.getQueries(ctx)
-	id, err := db.InsertAnonymousSpeaker(ctx)
+	id, err := db.InsertAnonymousSpeaker(ctx, &userID)
 	if err != nil {
 		return id, err
 	}
@@ -168,9 +225,9 @@ func (r *dbRepository) UpdateConversationSummary(ctx context.Context, summary st
 	})
 }
 
-func (r *dbRepository) GetRecordings(ctx context.Context) ([]types.SelectRecording, error) {
+func (r *dbRepository) GetRecordings(ctx context.Context, userID uuid.UUID) ([]types.SelectRecording, error) {
 	db := r.getQueries(ctx)
-	recs, err := db.GetRecordings(ctx)
+	recs, err := db.GetRecordings(ctx, &userID)
 	if err != nil {
 		return []types.SelectRecording{}, err
 	}

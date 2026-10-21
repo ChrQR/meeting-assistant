@@ -7,26 +7,61 @@ package database
 
 import (
 	"context"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getAllCompanies = `-- name: GetAllCompanies :many
-SELECT id, name, created_at, updated_at FROM company
+const deleteCompany = `-- name: DeleteCompany :exec
+DELETE FROM company
+  WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) GetAllCompanies(ctx context.Context) ([]Company, error) {
-	rows, err := q.db.Query(ctx, getAllCompanies)
+type DeleteCompanyParams struct {
+	ID     uuid.UUID
+	UserID *uuid.UUID
+}
+
+func (q *Queries) DeleteCompany(ctx context.Context, arg DeleteCompanyParams) error {
+	_, err := q.db.Exec(ctx, deleteCompany, arg.ID, arg.UserID)
+	return err
+}
+
+const getCompanies = `-- name: GetCompanies :many
+SELECT
+  c.id,
+  c.name,
+  c.created_at,
+  COUNT(s.id)::int AS speaker_count
+FROM company c
+LEFT JOIN speaker s ON s.company_id = c.id
+WHERE c.user_id = $1
+GROUP BY c.id
+ORDER BY c.name ASC
+`
+
+type GetCompaniesRow struct {
+	ID           uuid.UUID
+	Name         pgtype.Text
+	CreatedAt    time.Time
+	SpeakerCount int32
+}
+
+func (q *Queries) GetCompanies(ctx context.Context, userID *uuid.UUID) ([]GetCompaniesRow, error) {
+	rows, err := q.db.Query(ctx, getCompanies, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Company
+	var items []GetCompaniesRow
 	for rows.Next() {
-		var i Company
+		var i GetCompaniesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
 			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.SpeakerCount,
 		); err != nil {
 			return nil, err
 		}
@@ -36,4 +71,79 @@ func (q *Queries) GetAllCompanies(ctx context.Context) ([]Company, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getCompany = `-- name: GetCompany :one
+SELECT
+  c.id,
+  c.name,
+  c.created_at,
+  COUNT(s.id)::int AS speaker_count
+FROM company c
+LEFT JOIN speaker s ON s.company_id = c.id
+WHERE c.id = $1 AND c.user_id = $2
+GROUP BY c.id
+`
+
+type GetCompanyParams struct {
+	ID     uuid.UUID
+	UserID *uuid.UUID
+}
+
+type GetCompanyRow struct {
+	ID           uuid.UUID
+	Name         pgtype.Text
+	CreatedAt    time.Time
+	SpeakerCount int32
+}
+
+func (q *Queries) GetCompany(ctx context.Context, arg GetCompanyParams) (GetCompanyRow, error) {
+	row := q.db.QueryRow(ctx, getCompany, arg.ID, arg.UserID)
+	var i GetCompanyRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.SpeakerCount,
+	)
+	return i, err
+}
+
+const insertCompany = `-- name: InsertCompany :one
+INSERT INTO company (
+  name,
+  user_id
+) VALUES (
+  $1, $2
+) returning id
+`
+
+type InsertCompanyParams struct {
+	Name   pgtype.Text
+	UserID *uuid.UUID
+}
+
+func (q *Queries) InsertCompany(ctx context.Context, arg InsertCompanyParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertCompany, arg.Name, arg.UserID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const updateCompany = `-- name: UpdateCompany :exec
+UPDATE company
+  SET name = $2,
+      updated_at = now()
+  WHERE id = $1 AND user_id = $3
+`
+
+type UpdateCompanyParams struct {
+	ID     uuid.UUID
+	Name   pgtype.Text
+	UserID *uuid.UUID
+}
+
+func (q *Queries) UpdateCompany(ctx context.Context, arg UpdateCompanyParams) error {
+	_, err := q.db.Exec(ctx, updateCompany, arg.ID, arg.Name, arg.UserID)
+	return err
 }

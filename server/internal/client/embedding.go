@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
-	"log"
 	"net/http"
+	"time"
 
 	"github.com/ChrQR/meeting-assistant/server/internal/types"
 )
+
+const embeddingTimeout = 5 * time.Minute
 
 type embeddingClient struct {
 	URL    string
@@ -23,45 +26,55 @@ type EmbeddingClient interface {
 func NewEmbeddingClient(url string) EmbeddingClient {
 	return &embeddingClient{
 		URL:    url,
-		client: http.Client{},
+		client: http.Client{Timeout: embeddingTimeout},
 	}
 }
 
 func (c *embeddingClient) EmbedSpeakers(ctx context.Context, recording []byte, speakers []types.SpeakerData) (types.EmbeddingResponse, error) {
-	reqData := types.EmbeddingRequest{
+	if len(speakers) == 0 {
+		return types.EmbeddingResponse{Data: []types.EmbeddingResult{}}, nil
+	}
+
+	marshalledData, err := json.Marshal(types.EmbeddingRequest{
 		File:     recording,
 		Speakers: speakers,
-	}
-	marshalledData, err := json.Marshal(reqData)
+	})
 	if err != nil {
-		log.Printf("Error marshalling embedding request: %v", err)
-		return types.EmbeddingResponse{}, err
+		return types.EmbeddingResponse{}, fmt.Errorf("marshal embedding request: %w", err)
 	}
-	req, err := http.NewRequest("POST", c.URL, bytes.NewReader(marshalledData))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL, bytes.NewReader(marshalledData))
 	if err != nil {
-		log.Printf("Error creating embedding request: %v", err)
-		return types.EmbeddingResponse{}, err
+		return types.EmbeddingResponse{}, fmt.Errorf("create embedding request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		log.Printf("Error sending request: %v", err)
+		return types.EmbeddingResponse{}, fmt.Errorf("send embedding request: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("Unable to close response body: %v", err)
-		}
-	}()
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return types.EmbeddingResponse{}, err
+		return types.EmbeddingResponse{}, fmt.Errorf("read embedding response: %w", err)
 	}
+	if resp.StatusCode != http.StatusOK {
+		return types.EmbeddingResponse{}, fmt.Errorf("embedding service returned %s: %s", resp.Status, truncate(body, 500))
+	}
+
 	var respData types.EmbeddingResponse
 	if err := json.Unmarshal(body, &respData); err != nil {
-		return types.EmbeddingResponse{}, err
+		return types.EmbeddingResponse{}, fmt.Errorf("decode embedding response: %w", err)
 	}
 
 	return respData, nil
+}
+
+// truncate keeps error messages readable by limiting how much upstream body is included.
+func truncate(body []byte, limit int) string {
+	if len(body) <= limit {
+		return string(body)
+	}
+	return string(body[:limit]) + "…"
 }

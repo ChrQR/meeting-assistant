@@ -7,3 +7,9 @@ bun.lockb
 
 # Miscellaneous
 /static/
+
+# Generated / vendored
+/src/lib/components/ui/
+/src/api.ts
+/.svelte-kit/
+/build/

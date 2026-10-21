@@ -4,6 +4,46 @@ info:
   title: meeting-assistant-api
   version: 0.1.0
 paths:
+  /auth/providers:
+    get:
+      tags:
+        - auth
+      operationId: GetAuthProviders
+      description: List the configured single sign-on providers.
+      responses:
+        "200":
+          description: configured providers
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/AuthProviders"
+
+  /auth/me:
+    get:
+      tags:
+        - auth
+      operationId: GetMe
+      description: Return the authenticated user.
+      responses:
+        "200":
+          description: the current user
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: not authenticated
+
+  /auth/logout:
+    post:
+      tags:
+        - auth
+      operationId: Logout
+      description: Clear the session cookie.
+      responses:
+        "204":
+          description: signed out
+
   /recordings:
     summary: Endpoint for managing recordings
     get:
@@ -19,17 +59,7 @@ paths:
               schema:
                 type: array
                 items:
-                  properties:
-                    id:
-                      type: string
-                      format: uuid
-                    filename:
-                      type: string
-                    extension:
-                      type: string
-                    status:
-                      type: string
-
+                  $ref: "#/components/schemas/Recording"
         "500":
           description: internal error
     post:
@@ -45,6 +75,12 @@ paths:
               properties:
                 title:
                   type: string
+                meeting_at:
+                  type: string
+                  format: date-time
+                  description: |
+                    When the meeting took place. Accepts a date (YYYY-MM-DD) or a
+                    full RFC 3339 timestamp. Defaults to the upload time.
                 file:
                   type: string
                   format: binary
@@ -52,11 +88,702 @@ paths:
                 - title
                 - file
       responses:
-        "201":
-          description: Recording succesfully uploaded
+        "202":
+          description: |
+            Recording accepted. Transcription runs in the background; poll
+            GET /recordings for progress.
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Recording"
         "400":
           description: Bad request ie. missing data or fields
         "422":
           description: Misshaped json
         "500":
           description: An error happened on the server
+
+  /recordings/{id}/audio:
+    summary: Audio streaming for recordings
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - recordings
+      operationId: GetRecordingAudio
+      description: |
+        Streams the raw audio file of a recording directly from object storage.
+        Supports HTTP range requests so the browser can seek while playing.
+      responses:
+        "200":
+          description: The audio file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Partial content (range request)
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Recording not found
+        "500":
+          description: internal error
+
+  /conversations:
+    summary: Endpoint for managing conversations
+    get:
+      tags:
+        - conversations
+      operationId: GetConversations
+      description: Get all conversations, newest first.
+      responses:
+        "200":
+          description: successfully fetched all conversations
+          content:
+            "application/json":
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConversationSummary"
+        "500":
+          description: internal error
+
+  /conversations/{id}:
+    summary: Endpoint for a single conversation
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - conversations
+      operationId: GetConversation
+      description: Get a single conversation including its transcript segments.
+      responses:
+        "200":
+          description: successfully fetched the conversation
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "404":
+          description: Conversation not found
+        "500":
+          description: internal error
+
+  /conversations/{id}/segments/{segmentId}/ignore:
+    summary: Ignore or restore a transcript segment
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: segmentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags:
+        - conversations
+      operationId: SetSegmentIgnored
+      description: |
+        Mark a segment as ignored (or restore it). Only segments belonging to an
+        unidentified speaker can be ignored, since those are the ones that cannot
+        be attributed. Ignored segments remain in the transcript but no longer
+        count towards the conversation's unknown speaker count.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetSegmentIgnoredBody"
+      responses:
+        "200":
+          description: Segment updated
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ConversationSegment"
+        "404":
+          description: Conversation or segment not found
+        "409":
+          description: Segment belongs to a known speaker
+        "500":
+          description: internal error
+
+  /speakers:
+    summary: Endpoint for managing speakers
+    get:
+      tags:
+        - speakers
+      operationId: GetSpeakers
+      description: Get all speakers. Speakers with a null name are unknown and can be assigned.
+      responses:
+        "200":
+          description: successfully fetched all speakers
+          content:
+            "application/json":
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Speaker"
+        "500":
+          description: internal error
+    post:
+      tags:
+        - speakers
+      operationId: CreateSpeaker
+      description: Create a named speaker.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpeakerBody"
+      responses:
+        "201":
+          description: Speaker created
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Speaker"
+        "400":
+          description: Bad request
+        "500":
+          description: internal error
+
+  /speakers/{id}:
+    summary: Endpoint for a single speaker
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - speakers
+      operationId: GetSpeaker
+      description: Get a single speaker including their embeddings and segments.
+      responses:
+        "200":
+          description: successfully fetched the speaker
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/SpeakerDetail"
+        "404":
+          description: Speaker not found
+        "500":
+          description: internal error
+    patch:
+      tags:
+        - speakers
+      operationId: UpdateSpeaker
+      description: Update a speaker's name, email or company.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpeakerBody"
+      responses:
+        "200":
+          description: Speaker updated
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Speaker"
+        "400":
+          description: Bad request
+        "404":
+          description: Speaker not found
+        "500":
+          description: internal error
+    delete:
+      tags:
+        - speakers
+      operationId: DeleteSpeaker
+      description: Delete a speaker. Fails if the speaker still has segments.
+      responses:
+        "204":
+          description: Speaker deleted
+        "400":
+          description: Speaker still has segments
+        "404":
+          description: Speaker not found
+        "500":
+          description: internal error
+
+  /speakers/{id}/assign:
+    summary: Assign an unknown speaker
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - speakers
+      operationId: AssignSpeaker
+      description: |
+        Assign an unknown speaker (name == null).
+
+        - Provide `target_speaker_id` to merge this unknown speaker into an
+          existing speaker: all embeddings and segments are moved to the target
+          speaker and the unknown speaker is deleted.
+        - Provide `name` to give the unknown speaker a name in place. Optionally
+          `email` and `company_id` are applied as well.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignSpeakerBody"
+      responses:
+        "200":
+          description: Speaker assigned
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Speaker"
+        "400":
+          description: Bad request
+        "404":
+          description: Speaker not found
+        "409":
+          description: Speaker already known or invalid merge
+        "500":
+          description: internal error
+
+  /companies:
+    summary: Endpoint for managing companies
+    get:
+      tags:
+        - companies
+      operationId: GetCompanies
+      description: Get all companies.
+      responses:
+        "200":
+          description: successfully fetched all companies
+          content:
+            "application/json":
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Company"
+        "500":
+          description: internal error
+    post:
+      tags:
+        - companies
+      operationId: CreateCompany
+      description: Create a company.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyBody"
+      responses:
+        "201":
+          description: Company created
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Company"
+        "400":
+          description: Bad request
+        "500":
+          description: internal error
+
+  /companies/{id}:
+    summary: Endpoint for a single company
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags:
+        - companies
+      operationId: UpdateCompany
+      description: Update a company's name.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyBody"
+      responses:
+        "200":
+          description: Company updated
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Company"
+        "400":
+          description: Bad request
+        "404":
+          description: Company not found
+        "500":
+          description: internal error
+    delete:
+      tags:
+        - companies
+      operationId: DeleteCompany
+      description: Delete a company. Speakers attached to it are detached.
+      responses:
+        "204":
+          description: Company deleted
+        "404":
+          description: Company not found
+        "500":
+          description: internal error
+
+components:
+  schemas:
+    AuthProviders:
+      type: object
+      properties:
+        providers:
+          type: array
+          items:
+            type: string
+      required:
+        - providers
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        name:
+          type: [string, "null"]
+        avatar_url:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - name
+        - avatar_url
+        - created_at
+
+    Recording:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        extension:
+          type: string
+        status:
+          type: string
+      required:
+        - id
+        - filename
+        - extension
+        - status
+
+    ConversationSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        summary:
+          type: [string, "null"]
+        length:
+          type: number
+          format: double
+        cost:
+          type: number
+          format: double
+        language:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        meeting_at:
+          type: [string, "null"]
+          format: date-time
+          description: When the meeting took place. Null when not supplied on upload.
+        recording_id:
+          type: string
+          format: uuid
+        recording_status:
+          type: string
+        speaker_count:
+          type: integer
+        unknown_speaker_count:
+          type: integer
+      required:
+        - id
+        - title
+        - summary
+        - length
+        - cost
+        - language
+        - created_at
+        - meeting_at
+        - recording_id
+        - recording_status
+        - speaker_count
+        - unknown_speaker_count
+
+    Conversation:
+      allOf:
+        - $ref: "#/components/schemas/ConversationSummary"
+        - type: object
+          properties:
+            segments:
+              type: array
+              items:
+                $ref: "#/components/schemas/ConversationSegment"
+
+    ConversationSegment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        start_time:
+          type: number
+          format: double
+        end_time:
+          type: number
+          format: double
+        duration:
+          type: number
+          format: double
+        speaker_id:
+          type: string
+          format: uuid
+        speaker_name:
+          type: [string, "null"]
+        ignored:
+          type: boolean
+          description: Whether the user dismissed this segment as unidentified noise.
+      required:
+        - id
+        - text
+        - start_time
+        - end_time
+        - duration
+        - speaker_id
+        - speaker_name
+        - ignored
+
+    Speaker:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        company_id:
+          type: [string, "null"]
+          format: uuid
+        company_name:
+          type: [string, "null"]
+        user_id:
+          type: [string, "null"]
+          format: uuid
+          description: The application user this speaker represents, if linked.
+        user_email:
+          type: [string, "null"]
+          description: Email of the linked user, for display.
+        embedding_count:
+          type: integer
+        segment_count:
+          type: integer
+        total_speaking_time:
+          type: number
+          format: double
+          description: Total duration (seconds) of all segments belonging to this speaker.
+        conversation_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - company_id
+        - company_name
+        - user_id
+        - user_email
+        - embedding_count
+        - segment_count
+        - total_speaking_time
+        - conversation_count
+        - created_at
+
+    SpeakerEmbedding:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - created_at
+
+    SpeakerSegment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        start_time:
+          type: number
+          format: double
+        end_time:
+          type: number
+          format: double
+        conversation_id:
+          type: string
+          format: uuid
+        conversation_title:
+          type: string
+      required:
+        - id
+        - text
+        - start_time
+        - end_time
+        - conversation_id
+        - conversation_title
+
+    SpeakerDetail:
+      allOf:
+        - $ref: "#/components/schemas/Speaker"
+        - type: object
+          properties:
+            embeddings:
+              type: array
+              items:
+                $ref: "#/components/schemas/SpeakerEmbedding"
+            segments:
+              type: array
+              items:
+                $ref: "#/components/schemas/SpeakerSegment"
+
+    CreateSpeakerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: [string, "null"]
+        company_id:
+          type: [string, "null"]
+          format: uuid
+      required:
+        - name
+
+    UpdateSpeakerBody:
+      type: object
+      properties:
+        name:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        company_id:
+          type: [string, "null"]
+          format: uuid
+        clear_company:
+          type: boolean
+          description: Set to true to detach the speaker from their company.
+        user_id:
+          type: [string, "null"]
+          format: uuid
+          description: Link this speaker to an application user.
+        clear_user:
+          type: boolean
+          description: Set to true to detach the speaker from its user.
+
+    AssignSpeakerBody:
+      type: object
+      properties:
+        target_speaker_id:
+          type: [string, "null"]
+          format: uuid
+        name:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        company_id:
+          type: [string, "null"]
+          format: uuid
+
+    SetSegmentIgnoredBody:
+      type: object
+      properties:
+        ignored:
+          type: boolean
+      required:
+        - ignored
+
+    CompanyBody:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name
+
+    Company:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        speaker_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - speaker_count
+        - created_at
