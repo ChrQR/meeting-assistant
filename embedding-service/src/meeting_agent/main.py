@@ -3,11 +3,16 @@ import io
 from typing import Annotated
 
 import logfire
+import torch
 from fastapi import Depends, FastAPI
 from pydantic import BaseModel, field_validator
 
 from meeting_agent.classifier import SpeakerClassifier, get_speaker_classifier
 from meeting_agent.config import get_settings
+
+# NNPACK is unsupported on most CPUs, so PyTorch logs a warning on every
+# convolution it probes. Disable it once at startup to keep the logs readable.
+torch.backends.nnpack.set_flags(False)
 
 app = FastAPI()
 
@@ -20,6 +25,9 @@ if settings.logfire_api_key is not None:
         min_level=settings.log_level,
         environment="local-dev",
         token=settings.logfire_api_key,
+        # Continue the trace context forwarded by the Go server instead of
+        # warning about the propagated context on every incoming request.
+        distributed_tracing=True,
     )
     logfire.instrument_httpx()
     logfire.instrument_pydantic()
@@ -55,6 +63,11 @@ class EmbeddingResult(BaseModel):
 
 class EmbeddingResponse(BaseModel):
     data: list[EmbeddingResult]
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.post("/embedding")

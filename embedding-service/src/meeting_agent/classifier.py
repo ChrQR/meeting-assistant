@@ -2,8 +2,8 @@ from functools import lru_cache
 from typing import BinaryIO
 
 import numpy as np
+import soundfile as sf
 import torch
-import torchaudio
 import torchaudio.functional as F
 from speechbrain.inference.speaker import EncoderClassifier
 
@@ -20,7 +20,8 @@ class SpeakerClassifier:
     def load_audio(self, file: BinaryIO) -> torch.Tensor:
         """Decodes the MP3 file once, converts to mono, and resamples to 16 kHz."""
         file.seek(0)
-        waveform, sr = torchaudio.load(file, format="mp3")
+        data, sr = sf.read(file, dtype="float32", always_2d=True)  # [time, channels]
+        waveform = torch.from_numpy(data.T)  # -> [channels, time]
 
         # Convert to mono if multi-channel -> shape: [1, time]
         if waveform.shape[0] > 1:
